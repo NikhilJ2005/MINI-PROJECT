@@ -1,0 +1,171 @@
+.compare-view {
+  text-align: left;
+}
+
+.compare-view h2 {
+  margin-top: 0;
+}
+
+.compare-desc {
+  color: var(--text-gray);
+  margin-bottom: 20px;
+}
+
+.compare-setup {
+  background: #fff;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  margin-bottom: 24px;
+}
+
+.candidate-picker h4 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.candidate-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.chip {
+  padding: 6px 14px;
+  border: 2px solid var(--border-light);
+  border-radius: 20px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.chip:hover {
+  border-color: var(--primary);
+}
+
+.chip.selected {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.comparison-results {
+  margin-top: 24px;
+}
+
+.comparison-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.compare-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.compare-card h4 {
+  margin: 0 0 12px;
+}
+
+.compare-score {
+  margin-bottom: 8px;
+}
+
+.compare-meta {
+  font-size: 0.85rem;
+  color: var(--text-gray);
+}
+
+.skill-matrix-section {
+  margin-top: 24px;
+}
+
+.matrix-wrapper {
+  overflow-x: auto;
+}
+
+.skill-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.skill-matrix-table th {
+  background: var(--primary);
+  color: #fff;
+  padding: 10px 14px;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.skill-matrix-table th:first-child {
+  text-align: left;
+}
+
+.skill-matrix-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.skill-matrix-table td:first-child {
+  text-align: left;
+}
+
+.skill-name {
+  font-weight: 500;
+}
+
+.req-badge {
+  font-size: 0.7rem;
+  background: var(--color-missing-bg);
+  color: var(--color-missing);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 6px;
+}
+
+.nice-badge {
+  font-size: 0.7rem;
+  background: var(--color-claimed-bg);
+  color: var(--color-claimed);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 6px;
+}
+
+.nice-row {
+  opacity: 0.85;
+}
+
+.status-dot {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.status-dot.strong {
+  color: var(--color-strong);
+}
+
+.status-dot.claimed_only {
+  color: var(--color-claimed);
+}
+
+.status-dot.demonstrated_only {
+  color: var(--color-demonstrated);
+}
+
+.status-dot.missing {
+  color: var(--color-missing);
+}

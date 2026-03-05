@@ -1,0 +1,136 @@
+.candidates-page {
+  text-align: left;
+}
+
+.candidates-page h2 {
+  margin-top: 0;
+}
+
+.candidates-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.candidates-table th {
+  background: var(--primary);
+  color: #fff;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.candidates-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.9rem;
+}
+
+.candidates-table tr:last-child td {
+  border-bottom: none;
+}
+
+.action-cell {
+  display: flex;
+  gap: 8px;
+}
+
+.view-btn,
+.delete-btn {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.view-btn {
+  background: var(--primary);
+  color: #fff;
+}
+
+.view-btn:hover {
+  background: var(--primary-dark);
+}
+
+.delete-btn {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.delete-btn:hover {
+  background: #fca5a5;
+}
+
+.candidate-detail-panel {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+}
+
+.back-btn {
+  background: none;
+  border: 1px solid var(--border-light);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+
+.back-btn:hover {
+  background: var(--background);
+}
+
+.detail-info p {
+  margin: 6px 0;
+  font-size: 0.9rem;
+}
+
+.skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.skill-tag {
+  background: var(--color-demonstrated-bg);
+  color: var(--color-demonstrated);
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.analyses-section {
+  margin-top: 20px;
+}
+
+.analysis-card {
+  background: var(--background);
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.analysis-role {
+  font-weight: 600;
+}
+
+.analysis-meta {
+  font-size: 0.85rem;
+  color: var(--text-gray);
+  margin-top: 6px;
+}
