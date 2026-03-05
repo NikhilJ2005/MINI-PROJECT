@@ -15,23 +15,39 @@
 """
 
 import re
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import fitz  # PyMuPDF — high-performance PDF text extraction
 import spacy
 
 
 class ResumeParser:
-    """Parses resume files and extracts technical skills from the text."""
+    """Parses resume files and extracts technical skills and personal info from the text."""
+
+    # Regex patterns for extracting personal info
+    EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+    PHONE_PATTERN = re.compile(
+        r"(?:\+?\d{1,3}[\s\-]?)?\(?\d{3}\)?[\s\-]?\d{3}[\s\-]?\d{4}"
+    )
+    GITHUB_URL_PATTERN = re.compile(
+        r"(?:https?://)?(?:www\.)?github\.com/([a-zA-Z0-9\-]+)", re.IGNORECASE
+    )
+    LINKEDIN_URL_PATTERN = re.compile(
+        r"(?:https?://)?(?:www\.)?linkedin\.com/in/([a-zA-Z0-9\-]+)", re.IGNORECASE
+    )
+    EDUCATION_KEYWORDS = [
+        "B.Tech", "B.E.", "B.Sc", "M.Tech", "M.E.", "M.Sc", "MBA", "Ph.D", "PhD",
+        "Bachelor", "Master", "Diploma", "Associate", "B.S.", "M.S.", "B.A.", "M.A.",
+        "Computer Science", "Information Technology", "Engineering",
+        "University", "Institute", "College",
+    ]
 
     def __init__(self) -> None:
         """Initialize the parser by loading the spaCy English NLP model."""
-        # Load the small English model — good balance of speed and accuracy
         try:
             self.nlp = spacy.load("en_core_web_sm")
             print("   [ResumeParser] spaCy model loaded successfully.")
         except OSError:
-            # If the model isn't installed, warn the user
             print("   [ResumeParser] WARNING: spaCy model 'en_core_web_sm' not found.")
             print("   Run: python -m spacy download en_core_web_sm")
             self.nlp = None
@@ -158,6 +174,90 @@ class ResumeParser:
         return result
 
     # -----------------------------------------------------------------
+    #  Personal Info Extraction
+    # -----------------------------------------------------------------
+    def extract_personal_info(self, text: str) -> Dict:
+        """
+        Extract personal information from resume text.
+        Returns dict with: name, email, phone, github_username, github_url,
+                           linkedin_url, education
+        """
+        info: Dict = {
+            "name": "",
+            "email": "",
+            "phone": "",
+            "github_username": "",
+            "github_url": "",
+            "linkedin_url": "",
+            "education": "",
+        }
+
+        # Email
+        email_match = self.EMAIL_PATTERN.search(text)
+        if email_match:
+            info["email"] = email_match.group(0)
+
+        # Phone
+        phone_match = self.PHONE_PATTERN.search(text)
+        if phone_match:
+            info["phone"] = phone_match.group(0).strip()
+
+        # GitHub URL and username
+        github_match = self.GITHUB_URL_PATTERN.search(text)
+        if github_match:
+            info["github_username"] = github_match.group(1)
+            info["github_url"] = github_match.group(0)
+            if not info["github_url"].startswith("http"):
+                info["github_url"] = "https://" + info["github_url"]
+
+        # LinkedIn URL
+        linkedin_match = self.LINKEDIN_URL_PATTERN.search(text)
+        if linkedin_match:
+            info["linkedin_url"] = linkedin_match.group(0)
+            if not info["linkedin_url"].startswith("http"):
+                info["linkedin_url"] = "https://" + info["linkedin_url"]
+
+        # Name — use spaCy NER to find PERSON entities (first one is usually the candidate)
+        if self.nlp is not None:
+            # Only process the first ~500 chars for name detection (name is at the top)
+            doc = self.nlp(text[:500])
+            for ent in doc.ents:
+                if ent.label_ == "PERSON":
+                    name = ent.text.strip()
+                    # Filter out single-char or obviously wrong names
+                    if len(name) > 2 and not any(c.isdigit() for c in name):
+                        info["name"] = name
+                        break
+
+        # If spaCy didn't find a name, use the first line heuristic
+        if not info["name"]:
+            lines = [l.strip() for l in text.split("\n") if l.strip()]
+            if lines:
+                first_line = lines[0]
+                # First line is often the name if it's short and has no special chars
+                if (
+                    len(first_line) < 50
+                    and not self.EMAIL_PATTERN.search(first_line)
+                    and not self.PHONE_PATTERN.search(first_line)
+                    and not any(kw.lower() in first_line.lower() for kw in ["resume", "curriculum", "objective"])
+                ):
+                    info["name"] = first_line
+
+        # Education — find lines containing education keywords
+        education_lines = []
+        for line in text.split("\n"):
+            line_stripped = line.strip()
+            if any(kw.lower() in line_stripped.lower() for kw in self.EDUCATION_KEYWORDS):
+                if len(line_stripped) > 5 and len(line_stripped) < 200:
+                    education_lines.append(line_stripped)
+        if education_lines:
+            info["education"] = " | ".join(education_lines[:3])
+
+        print(f"   [ResumeParser] Extracted info — Name: {info['name']}, "
+              f"Email: {info['email']}, GitHub: {info['github_username']}")
+        return info
+
+    # -----------------------------------------------------------------
     #  Main Parse Method (Entry Point)
     # -----------------------------------------------------------------
     def parse(
@@ -213,8 +313,12 @@ class ResumeParser:
         # Run skill extraction on the raw text
         extracted_skills = self.extract_skills(raw_text, skills_master)
 
+        # Extract personal info (name, email, phone, github, education)
+        personal_info = self.extract_personal_info(raw_text)
+
         return {
             "raw_text": raw_text,
             "extracted_skills": extracted_skills,
             "skill_count": len(extracted_skills),
+            "personal_info": personal_info,
         }
