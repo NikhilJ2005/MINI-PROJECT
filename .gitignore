@@ -6,3 +6,5 @@ resume-skill-gap-analyzer/backend/datasets/
 __pycache__/
 *.pyc
 .env
+node_modules/
+package-lock.json

@@ -1,0 +1,150 @@
+import { useState, useEffect } from "react";
+import "./cssFile/CandidatesList.css";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+function CandidatesList() {
+  const [candidates, setCandidates] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [detail, setDetail] = useState(null);
+
+  const fetchCandidates = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/candidates?limit=100`);
+      if (!res.ok) throw new Error("Failed to load candidates");
+      const data = await res.json();
+      setCandidates(data.candidates);
+      setTotal(data.total);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchCandidates(); }, []);
+
+  const viewCandidate = async (id) => {
+    setSelected(id);
+    try {
+      const res = await fetch(`${API_BASE_URL}/candidates/${id}`);
+      if (!res.ok) throw new Error("Failed to load candidate");
+      setDetail(await res.json());
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const deleteCandidate = async (id) => {
+    if (!confirm("Delete this candidate?")) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/candidates/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setCandidates((prev) => prev.filter((c) => c.id !== id));
+      setTotal((prev) => prev - 1);
+      if (selected === id) { setSelected(null); setDetail(null); }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  if (loading) return <div className="loading-msg">Loading candidates...</div>;
+  if (error) return <div className="error-msg">{error}</div>;
+
+  return (
+    <div className="candidates-page">
+      <h2>Candidates ({total})</h2>
+
+      {detail && (
+        <div className="candidate-detail-panel">
+          <button className="back-btn" onClick={() => { setSelected(null); setDetail(null); }}>
+            &larr; Back to list
+          </button>
+          <h3>{detail.candidate.name || "Unknown"}</h3>
+          <div className="detail-info">
+            {detail.candidate.email && <p>Email: {detail.candidate.email}</p>}
+            {detail.candidate.github_username && <p>GitHub: @{detail.candidate.github_username}</p>}
+            {detail.candidate.education && <p>Education: {detail.candidate.education}</p>}
+            {detail.candidate.extracted_skills && (
+              <div className="skills-list">
+                <strong>Extracted Skills:</strong>
+                <div className="skill-tags">
+                  {(typeof detail.candidate.extracted_skills === "string"
+                    ? JSON.parse(detail.candidate.extracted_skills)
+                    : detail.candidate.extracted_skills
+                  ).map((s, i) => (
+                    <span className="skill-tag" key={i}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {detail.analyses && detail.analyses.length > 0 && (
+            <div className="analyses-section">
+              <h4>Analysis History</h4>
+              {detail.analyses.map((a, i) => (
+                <div className="analysis-card" key={i}>
+                  <div className="analysis-header">
+                    <span className="analysis-role">{a.target_role}</span>
+                    <span className={`score-badge ${getScoreClass(a.match_score)}`}>
+                      {Math.round(a.match_score)}%
+                    </span>
+                  </div>
+                  <div className="analysis-meta">
+                    Confidence: {Math.round(a.confidence)}% | Gap: {Math.round(a.gap_score)}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!detail && (
+        <div className="candidates-list">
+          {candidates.length === 0 ? (
+            <p className="no-data">No candidates yet. Analyze some resumes first!</p>
+          ) : (
+            <table className="candidates-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>GitHub</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {candidates.map((c) => (
+                  <tr key={c.id}>
+                    <td>{c.id}</td>
+                    <td>{c.name || "—"}</td>
+                    <td>{c.email || "—"}</td>
+                    <td>{c.github_username ? `@${c.github_username}` : "—"}</td>
+                    <td className="action-cell">
+                      <button className="view-btn" onClick={() => viewCandidate(c.id)}>View</button>
+                      <button className="delete-btn" onClick={() => deleteCandidate(c.id)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getScoreClass(score) {
+  if (score >= 75) return "excellent";
+  if (score >= 50) return "good";
+  if (score >= 25) return "fair";
+  return "poor";
+}
+
+export default CandidatesList;

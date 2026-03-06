@@ -1,0 +1,17 @@
+.rankings-view {
+  text-align: left;
+}
+
+.rankings-view h2 {
+  margin-top: 0;
+}
+
+.rankings-desc {
+  color: var(--text-gray);
+  margin-bottom: 20px;
+}
+
+.role-selector {
+  max-width: 400px;
+  margin-bottom: 20px;
+}
