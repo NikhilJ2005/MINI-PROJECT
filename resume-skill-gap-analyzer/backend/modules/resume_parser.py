@@ -21,6 +21,48 @@ import fitz  # PyMuPDF — high-performance PDF text extraction
 import spacy
 
 
+def compile_skill_patterns(skills_master: Dict[str, List[str]]) -> Dict[str, "re.Pattern"]:
+    """Pre-compile regex patterns for all skills. Call once at startup."""
+    patterns = {}
+    for category, skills in skills_master.items():
+        for skill in skills:
+            if skill in ("C++", "C#"):
+                patterns[skill] = re.compile(re.escape(skill.lower()))
+            else:
+                patterns[skill] = re.compile(r"\b" + re.escape(skill.lower()) + r"\b")
+    return patterns
+
+
+# Module-level cache for compiled patterns
+_compiled_skill_patterns: Dict[str, "re.Pattern"] = {}
+
+
+def set_compiled_patterns(patterns: Dict[str, "re.Pattern"]) -> None:
+    """Set the module-level compiled patterns cache."""
+    global _compiled_skill_patterns
+    _compiled_skill_patterns = patterns
+
+
+def get_compiled_patterns() -> Dict[str, "re.Pattern"]:
+    """Get the module-level compiled patterns cache."""
+    return _compiled_skill_patterns
+
+
+# Module-level flattened skills list (computed once at startup)
+_all_skills_flat: List[str] = []
+
+
+def set_flat_skills(skills_master: Dict[str, List[str]]) -> None:
+    """Flatten skills_master once at startup."""
+    global _all_skills_flat
+    _all_skills_flat = [skill for skills in skills_master.values() for skill in skills]
+
+
+def get_flat_skills() -> List[str]:
+    """Get the pre-flattened skills list."""
+    return _all_skills_flat
+
+
 class ResumeParser:
     """Parses resume files and extracts technical skills and personal info from the text."""
 
@@ -110,7 +152,7 @@ class ResumeParser:
     # -----------------------------------------------------------------
     #  Skill Extraction (Core NLP + Regex Logic)
     # -----------------------------------------------------------------
-    def extract_skills(self, text: str, skills_master: Dict[str, List[str]]) -> List[str]:
+    def extract_skills(self, text: str, skills_master: Dict[str, List[str]], spacy_doc=None) -> List[str]:
         """
         Identify technical skills mentioned in the resume text.
 
@@ -131,30 +173,36 @@ class ResumeParser:
         """
         found_skills = set()
 
-        # Flatten the master skills dict into one list
+        # Lowercase version of the text for case-insensitive matching
+        text_lower = text.lower()
+
+        # Use pre-compiled patterns if available, otherwise compile on the fly
+        patterns = get_compiled_patterns()
+        if patterns:
+            for skill, pattern in patterns.items():
+                if pattern.search(text_lower):
+                    found_skills.add(skill)
+        else:
+            # Fallback: flatten and compile per-request (slow path)
+            all_skills = []
+            for category, skills in skills_master.items():
+                all_skills.extend(skills)
+            for skill in all_skills:
+                if skill in ("C++", "C#"):
+                    pat = re.escape(skill.lower())
+                else:
+                    pat = r"\b" + re.escape(skill.lower()) + r"\b"
+                if re.search(pat, text_lower):
+                    found_skills.add(skill)
+
+        # Flatten for spaCy NLP matching below
         all_skills = []
         for category, skills in skills_master.items():
             all_skills.extend(skills)
 
-        # Lowercase version of the text for case-insensitive matching
-        text_lower = text.lower()
-
-        # --- Regex-based skill matching ---
-        for skill in all_skills:
-            # Build a regex pattern with word boundaries
-            # re.escape handles special characters like "C++", "C#", "Node.js"
-            pattern = r"\b" + re.escape(skill.lower()) + r"\b"
-
-            # Special handling for skills with special chars that break \b
-            if skill in ("C++", "C#"):
-                pattern = re.escape(skill.lower())
-
-            if re.search(pattern, text_lower):
-                found_skills.add(skill)
-
         # --- spaCy NLP-based extraction (supplementary) ---
         if self.nlp is not None:
-            doc = self.nlp(text)
+            doc = spacy_doc if spacy_doc is not None else self.nlp(text)
 
             # Extract noun chunks (e.g., "machine learning", "data science")
             noun_chunks = [chunk.text.lower().strip() for chunk in doc.noun_chunks]
@@ -176,7 +224,7 @@ class ResumeParser:
     # -----------------------------------------------------------------
     #  Personal Info Extraction
     # -----------------------------------------------------------------
-    def extract_personal_info(self, text: str) -> Dict:
+    def extract_personal_info(self, text: str, spacy_doc=None) -> Dict:
         """
         Extract personal information from resume text.
         Returns dict with: name, email, phone, github_username, github_url,
@@ -219,9 +267,15 @@ class ResumeParser:
 
         # Name — use spaCy NER to find PERSON entities (first one is usually the candidate)
         if self.nlp is not None:
-            # Only process the first ~500 chars for name detection (name is at the top)
-            doc = self.nlp(text[:500])
+            # Use pre-computed doc if available, otherwise process first ~500 chars
+            if spacy_doc is not None:
+                doc = spacy_doc
+            else:
+                doc = self.nlp(text[:500])
             for ent in doc.ents:
+                # Only look for names in first 500 chars of the document
+                if ent.start_char > 500:
+                    break
                 if ent.label_ == "PERSON":
                     name = ent.text.strip()
                     # Filter out single-char or obviously wrong names
@@ -310,11 +364,14 @@ class ResumeParser:
                 "skill_count": 0,
             }
 
-        # Run skill extraction on the raw text
-        extracted_skills = self.extract_skills(raw_text, skills_master)
+        # Run spaCy NLP once and share the doc across both extraction methods
+        spacy_doc = self.nlp(raw_text) if self.nlp else None
 
-        # Extract personal info (name, email, phone, github, education)
-        personal_info = self.extract_personal_info(raw_text)
+        # Run skill extraction on the raw text (reuse spaCy doc)
+        extracted_skills = self.extract_skills(raw_text, skills_master, spacy_doc=spacy_doc)
+
+        # Extract personal info (reuse spaCy doc — filters entities by position)
+        personal_info = self.extract_personal_info(raw_text, spacy_doc=spacy_doc)
 
         return {
             "raw_text": raw_text,

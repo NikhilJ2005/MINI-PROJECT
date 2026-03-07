@@ -25,10 +25,24 @@
 }
 
 
+.app-layout {
+  display: flex;
+  position: relative;
+}
+
 .main-content {
   padding-top: 24px;
   padding-bottom: 40px;
   min-height: 60vh;
+  flex: 1;
+  transition: margin-left 0.3s ease;
+}
+
+.tab-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-dark);
+  font-size: 1rem;
 }
 
 .input-section{

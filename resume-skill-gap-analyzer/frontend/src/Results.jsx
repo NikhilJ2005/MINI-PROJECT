@@ -1,9 +1,10 @@
+import { memo } from "react";
 import ScoreCard from "./ScoreCard";
 import Summary from "./Summary";
 import SkillTable from "./SkillTable";
 import "./cssFile/Results.css";
 
-function Results({ report }) {
+const Results = memo(function Results({ report }) {
     const ml_insights = report.ml_insights;
     const git_insights = report.github_insights;
     const maxLang=git_insights.top_languages[0].bytes
@@ -76,5 +77,5 @@ function Results({ report }) {
             </div>
         </section>
     );
-}
+});
 export default Results;

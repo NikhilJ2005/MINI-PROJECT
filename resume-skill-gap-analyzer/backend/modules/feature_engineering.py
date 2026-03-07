@@ -37,6 +37,7 @@ class FeatureEngineer:
         """
         self.use_transformers = False
         self.st_model = None
+        self._embedding_cache: Dict[str, np.ndarray] = {}
 
         try:
             from sentence_transformers import SentenceTransformer
@@ -235,16 +236,28 @@ class FeatureEngineer:
         """
         try:
             if self.use_transformers and self.st_model is not None:
-                # Sentence-transformers path
-                embeddings = self.st_model.encode(
-                    [resume_text, job_description],
-                    convert_to_numpy=True
-                )
-                # Cosine similarity between the two embeddings
+                import hashlib
                 from numpy.linalg import norm
+
+                # Cache embeddings by content hash to avoid re-encoding
+                def _get_embedding(text: str) -> np.ndarray:
+                    key = hashlib.md5(text.encode()).hexdigest()
+                    if key not in self._embedding_cache:
+                        self._embedding_cache[key] = self.st_model.encode(
+                            text, convert_to_numpy=True
+                        )
+                        # Keep cache bounded (LRU-style: evict oldest if >100)
+                        if len(self._embedding_cache) > 100:
+                            oldest = next(iter(self._embedding_cache))
+                            del self._embedding_cache[oldest]
+                    return self._embedding_cache[key]
+
+                emb_resume = _get_embedding(resume_text)
+                emb_job = _get_embedding(job_description)
+
                 cos_sim = float(
-                    np.dot(embeddings[0], embeddings[1]) /
-                    (norm(embeddings[0]) * norm(embeddings[1]) + 1e-8)
+                    np.dot(emb_resume, emb_job) /
+                    (norm(emb_resume) * norm(emb_job) + 1e-8)
                 )
                 return max(0.0, min(1.0, cos_sim))
             else:
