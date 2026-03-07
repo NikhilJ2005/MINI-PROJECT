@@ -30,6 +30,14 @@ class Database:
     def __init__(self, db_path: str = DB_PATH) -> None:
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+        # Run PRAGMAs once at init, not per-connection
+        init_conn = sqlite3.connect(db_path)
+        init_conn.execute("PRAGMA journal_mode=WAL")
+        init_conn.execute("PRAGMA foreign_keys=ON")
+        init_conn.execute("PRAGMA synchronous=NORMAL")
+        init_conn.close()
+
         self._init_tables()
         logger.info(f"[Database] Initialized at {db_path}")
 
@@ -37,7 +45,6 @@ class Database:
     def _connect(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         try:
             yield conn
@@ -349,6 +356,94 @@ class Database:
                 d["report_json"] = json.loads(d["report_json"] or "{}")
                 results.append(d)
             return results
+
+    # -----------------------------------------------------------------
+    #  Analysis History (for sidebar)
+    # -----------------------------------------------------------------
+    def get_recent_analyses(self, limit: int = 50) -> List[Dict]:
+        """Get recent analyses with candidate info for the history sidebar."""
+        with self._connect() as conn:
+            rows = conn.execute("""
+                SELECT
+                    a.id as analysis_id,
+                    a.candidate_id,
+                    c.name as candidate_name,
+                    c.resume_filename,
+                    a.target_role,
+                    a.match_score,
+                    a.confidence,
+                    a.analyzed_at
+                FROM analyses a
+                JOIN candidates c ON c.id = a.candidate_id
+                ORDER BY a.analyzed_at DESC
+                LIMIT ?
+            """, (limit,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_analysis_by_id(self, analysis_id: int) -> Optional[Dict]:
+        """Get a single analysis with full report_json by ID."""
+        with self._connect() as conn:
+            row = conn.execute("""
+                SELECT
+                    a.*,
+                    c.name as candidate_name,
+                    c.email as candidate_email,
+                    c.github_username,
+                    c.resume_filename
+                FROM analyses a
+                JOIN candidates c ON c.id = a.candidate_id
+                WHERE a.id = ?
+            """, (analysis_id,)).fetchone()
+            if row:
+                d = dict(row)
+                d["report_json"] = json.loads(d["report_json"])
+                d["github_skills"] = json.loads(d["github_skills"])
+                d["missing_skills"] = json.loads(d["missing_skills"])
+                return d
+            return None
+
+    # -----------------------------------------------------------------
+    #  Batch Inserts (for batch processing optimization)
+    # -----------------------------------------------------------------
+    def insert_candidate_batch(self, candidates: List[Dict]) -> List[int]:
+        """Insert multiple candidates in a single transaction. Returns list of IDs."""
+        ids = []
+        with self._connect() as conn:
+            for c in candidates:
+                cursor = conn.execute("""
+                    INSERT INTO candidates
+                        (name, email, phone, education, github_username, github_url,
+                         linkedin_url, resume_text, resume_filename, extracted_skills, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    c.get("name", ""), c.get("email", ""), c.get("phone", ""),
+                    c.get("education", ""), c.get("github_username", ""),
+                    c.get("github_url", ""), c.get("linkedin_url", ""),
+                    c.get("resume_text", ""), c.get("resume_filename", ""),
+                    json.dumps(c.get("extracted_skills", [])), time.time(),
+                ))
+                ids.append(cursor.lastrowid)
+        return ids
+
+    def insert_analysis_batch(self, analyses: List[Dict]) -> List[int]:
+        """Insert multiple analyses in a single transaction. Returns list of IDs."""
+        ids = []
+        with self._connect() as conn:
+            for a in analyses:
+                cursor = conn.execute("""
+                    INSERT INTO analyses
+                        (candidate_id, target_role, match_score, gap_score,
+                         confidence, report_json, github_skills, missing_skills, analyzed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    a["candidate_id"], a["target_role"],
+                    a.get("match_score", 0), a.get("gap_score", 0),
+                    a.get("confidence", 0), json.dumps(a.get("report", {})),
+                    json.dumps(a.get("github_skills", [])),
+                    json.dumps(a.get("missing_skills", [])), time.time(),
+                ))
+                ids.append(cursor.lastrowid)
+        return ids
 
     # -----------------------------------------------------------------
     #  Stats

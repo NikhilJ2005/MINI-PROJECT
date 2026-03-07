@@ -32,7 +32,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 # Import all pipeline modules
-from modules.resume_parser import ResumeParser
+from modules.resume_parser import ResumeParser, compile_skill_patterns, set_compiled_patterns, get_compiled_patterns, set_flat_skills
 from modules.github_analyzer import GitHubAnalyzer
 from modules.feature_engineering import FeatureEngineer
 from modules.ml_model import SkillGapMLModel
@@ -139,6 +139,14 @@ async def lifespan(app: FastAPI):
     total_skills = sum(len(v) for v in skills_master.values())
     logger.info(f"Loaded {total_skills} skills across {len(skills_master)} categories.")
 
+    # Pre-compile regex patterns for skill matching (used across all modules)
+    compiled_patterns = compile_skill_patterns(skills_master)
+    set_compiled_patterns(compiled_patterns)
+    logger.info(f"Pre-compiled {len(compiled_patterns)} skill regex patterns.")
+
+    # Flatten skills_master once for reuse across modules
+    set_flat_skills(skills_master)
+
     # Initialize modules
     logger.info("Initializing pipeline modules...")
     resume_parser = ResumeParser()
@@ -164,6 +172,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Close async HTTP client
+    if github_analyzer:
+        await github_analyzer.close()
     logger.info("Shutting down Automated Recruiting Platform.")
 
 
@@ -208,7 +219,7 @@ class JobDescriptionRequest(BaseModel):
 # ---------------------------------------------------------------------------
 #  Helper: Run full analysis pipeline for one candidate
 # ---------------------------------------------------------------------------
-def _run_single_analysis(
+async def _run_single_analysis(
     resume_text: str,
     claimed_skills: List[str],
     github_username: str,
@@ -229,7 +240,7 @@ def _run_single_analysis(
 
     if github_username:
         try:
-            github_result = github_analyzer.analyze_github_profile(github_username, skills_master)
+            github_result = await github_analyzer.analyze_github_profile(github_username, skills_master)
             demonstrated_skills = github_result["demonstrated_skills"]
         except Exception as e:
             github_result["error"] = str(e)
@@ -370,7 +381,7 @@ async def analyze(
 
     # Run pipeline
     try:
-        result = _run_single_analysis(
+        result = await _run_single_analysis(
             resume_text=resume_result["raw_text"],
             claimed_skills=claimed_skills,
             github_username=github_username,
@@ -435,7 +446,7 @@ async def analyze_text(request: TextAnalyzeRequest):
         github_username = personal_info["github_username"]
 
     try:
-        result = _run_single_analysis(
+        result = await _run_single_analysis(
             resume_text=request.resume_text,
             claimed_skills=claimed_skills,
             github_username=github_username,
@@ -514,7 +525,7 @@ async def analyze_batch(
             personal_info = resume_result.get("personal_info", {})
             github_username = personal_info.get("github_username", "")
 
-            result = _run_single_analysis(
+            result = await _run_single_analysis(
                 resume_text=resume_result["raw_text"],
                 claimed_skills=claimed_skills,
                 github_username=github_username,
@@ -708,19 +719,23 @@ async def parse_job_description(request: JobDescriptionRequest):
     text = request.description
     text_lower = text.lower()
 
-    # Flatten master skills
-    all_skills = []
-    for category, skills in skills_master.items():
-        all_skills.extend(skills)
-
-    # Find skills mentioned in the JD
+    # Find skills mentioned in the JD using pre-compiled patterns
     found_skills = set()
-    for skill in all_skills:
-        pattern = r"\b" + re.escape(skill.lower()) + r"\b"
-        if skill in ("C++", "C#"):
-            pattern = re.escape(skill.lower())
-        if re.search(pattern, text_lower):
-            found_skills.add(skill)
+    patterns = get_compiled_patterns()
+    if patterns:
+        for skill, pattern in patterns.items():
+            if pattern.search(text_lower):
+                found_skills.add(skill)
+    else:
+        all_skills = []
+        for category, skills in skills_master.items():
+            all_skills.extend(skills)
+        for skill in all_skills:
+            pat = r"\b" + re.escape(skill.lower()) + r"\b"
+            if skill in ("C++", "C#"):
+                pat = re.escape(skill.lower())
+            if re.search(pat, text_lower):
+                found_skills.add(skill)
 
     # Heuristic: skills in "required" sections vs "nice to have" sections
     required_skills = []
@@ -743,10 +758,12 @@ async def parse_job_description(request: JobDescriptionRequest):
         else:
             nice_section += line + "\n"
 
+    required_lower = required_section.lower()
+    nice_lower = nice_section.lower()
     for skill in found_skills:
-        skill_lower = skill.lower()
-        in_required = re.search(r"\b" + re.escape(skill_lower) + r"\b", required_section.lower())
-        in_nice = re.search(r"\b" + re.escape(skill_lower) + r"\b", nice_section.lower())
+        pat = patterns.get(skill) if patterns else re.compile(r"\b" + re.escape(skill.lower()) + r"\b")
+        in_required = pat.search(required_lower)
+        in_nice = pat.search(nice_lower)
 
         if in_nice and not in_required:
             nice_to_have.append(skill)
@@ -768,6 +785,29 @@ async def parse_job_description(request: JobDescriptionRequest):
         "total_skills_found": len(found_skills),
         "added_to_roles": role_name in job_roles_data,
     }
+
+
+# ---------------------------------------------------------------------------
+#  ENDPOINT: Analysis History (for sidebar)
+# ---------------------------------------------------------------------------
+@app.get("/analysis-history")
+async def get_analysis_history(limit: int = 50):
+    """Get recent analyses for the history sidebar."""
+    analyses = db.get_recent_analyses(limit)
+    return {"analyses": analyses}
+
+
+@app.get("/analysis/{analysis_id}")
+async def get_analysis_detail(analysis_id: int):
+    """Get full analysis report by ID."""
+    analysis = db.get_analysis_by_id(analysis_id)
+    if not analysis:
+        raise HTTPException(404, "Analysis not found.")
+    # Return the stored report_json as the full report
+    report = analysis["report_json"]
+    report["candidate_id"] = analysis["candidate_id"]
+    report["analysis_id"] = analysis["id"]
+    return report
 
 
 # ---------------------------------------------------------------------------
