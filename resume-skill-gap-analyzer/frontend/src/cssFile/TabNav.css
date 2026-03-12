@@ -1,7 +1,7 @@
 .tab-nav {
   display: flex;
   gap: 0;
-  background: #fff;
+  background: var(--card-bg, #fff);
   border-bottom: 2px solid var(--border-light);
   max-width: var(--max-width);
   margin: 0 auto;

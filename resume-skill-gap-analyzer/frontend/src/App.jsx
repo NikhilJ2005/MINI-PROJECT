@@ -17,6 +17,8 @@ const TabFallback = () => (
   <div className="tab-loading">Loading...</div>
 );
 
+const TAB_KEYS = ["analyze", "batch", "candidates", "rankings", "compare", "jd-parser", "dashboard"];
+
 function App() {
   const [activeTab, setActiveTab] = useState(
     () => localStorage.getItem("activeTab") || "analyze"
@@ -28,10 +30,64 @@ function App() {
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(true);
 
+  // Dark mode state
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem("theme") === "dark"
+  );
+
+  // Apply dark mode on mount and toggle
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+    localStorage.setItem("theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
+
+  const toggleDarkMode = useCallback(() => {
+    setDarkMode((d) => !d);
+  }, []);
+
   // Persist activeTab to localStorage
   useEffect(() => {
     localStorage.setItem("activeTab", activeTab);
   }, [activeTab]);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Alt+1-7: switch tabs
+      if (e.altKey && e.key >= "1" && e.key <= "7") {
+        e.preventDefault();
+        const idx = parseInt(e.key) - 1;
+        if (TAB_KEYS[idx]) setActiveTab(TAB_KEYS[idx]);
+        return;
+      }
+      // Alt+N: new analysis
+      if (e.altKey && (e.key === "n" || e.key === "N")) {
+        e.preventDefault();
+        setReport(null);
+        setCurrentAnalysisId(null);
+        setError("");
+        setActiveTab("analyze");
+        return;
+      }
+      // Alt+D: toggle dark mode
+      if (e.altKey && (e.key === "d" || e.key === "D")) {
+        e.preventDefault();
+        toggleDarkMode();
+        return;
+      }
+      // Escape: clear report
+      if (e.key === "Escape") {
+        if (report) {
+          setReport(null);
+          setCurrentAnalysisId(null);
+        }
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [report, toggleDarkMode]);
 
   // Called after a new analysis completes
   const handleReportReceived = useCallback((newReport) => {
@@ -62,12 +118,21 @@ function App() {
   return (
     <>
       <header className="app-header">
-        <div className="container">
-          <h1 className="app-title">Automated Recruiting Platform</h1>
-          <p className="app-subtitle">
-            Upload resumes, rank candidates, compare skills, and discover skill
-            gaps for any target role — powered by Machine Learning.
-          </p>
+        <div className="container header-row">
+          <div>
+            <h1 className="app-title">Automated Recruiting Platform</h1>
+            <p className="app-subtitle">
+              Upload resumes, rank candidates, compare skills, and discover skill
+              gaps for any target role — powered by Machine Learning.
+            </p>
+          </div>
+          <button
+            className="theme-toggle-btn"
+            onClick={toggleDarkMode}
+            title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {darkMode ? "\u2600\uFE0F" : "\uD83C\uDF19"}
+          </button>
         </div>
       </header>
 
@@ -121,6 +186,9 @@ function App() {
       <footer className="app-footer">
         <div className="container">
           <p>Automated Recruiting Platform &mdash; Powered by FastAPI, Scikit-learn &amp; spaCy</p>
+          <p className="shortcuts-hint">
+            Shortcuts: Alt+1-7 tabs | Alt+N new | Alt+D dark mode | Esc clear | Ctrl+Enter submit
+          </p>
         </div>
       </footer>
     </>

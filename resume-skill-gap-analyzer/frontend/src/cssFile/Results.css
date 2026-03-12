@@ -2,7 +2,7 @@
 .recommendations,
 .ml-insights,
 .github-insights{
-    background: white;
+    background: var(--card-bg, white);
     border-radius: 12px;
     padding: 28px;
     box-shadow: var(--shadow-lg);

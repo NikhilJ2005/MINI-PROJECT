@@ -5,7 +5,7 @@
 
 
 .score-card {
-    background: white;
+    background: var(--card-bg, white);
     border-radius:12px;
     box-shadow: var(--shadow-lg);
     padding: 40px;

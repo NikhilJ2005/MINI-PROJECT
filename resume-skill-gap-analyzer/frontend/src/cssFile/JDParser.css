@@ -12,7 +12,7 @@
 }
 
 .jd-form {
-  background: #fff;
+  background: var(--card-bg, #fff);
   padding: 24px;
   border-radius: 12px;
   box-shadow: var(--shadow);
@@ -36,7 +36,7 @@
 }
 
 .jd-results {
-  background: #fff;
+  background: var(--card-bg, #fff);
   padding: 24px;
   border-radius: 12px;
   box-shadow: var(--shadow);

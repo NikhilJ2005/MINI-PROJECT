@@ -1,8 +1,15 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import "./cssFile/ResumeUpload.css";
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / 1048576).toFixed(1) + " MB";
+}
 
 function ResumeUpload({onFileSelect}) {
   const [fileName, setFileName] = useState("");
+  const [fileSize, setFileSize] = useState(0);
   const [error, setError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
@@ -14,13 +21,23 @@ function ResumeUpload({onFileSelect}) {
 
     if (validTypes.includes(file.type)) {
       setFileName(file.name);
+      setFileSize(file.size);
       setError("");
       onFileSelect(file);
     } else {
       setFileName("");
+      setFileSize(0);
       setError("Only PDF or TXT files are allowed.");
       onFileSelect(null);
     }
+  };
+
+  const removeFile = (e) => {
+    e.stopPropagation();
+    setFileName("");
+    setFileSize(0);
+    setError("");
+    onFileSelect(null);
   };
 
   const handleDrop = (e) => {
@@ -49,6 +66,27 @@ function ResumeUpload({onFileSelect}) {
     e.target.value = "";
   };
 
+  // Clipboard paste support
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file) {
+            handleFile(file);
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
+
+  const fileIcon = fileName.endsWith(".pdf") ? "\uD83D\uDCC4" : "\uD83D\uDCDD";
+
   return (
     <div className="resume-upload-container">
       <label htmlFor="resume-upload" className="upload-label">
@@ -64,15 +102,26 @@ function ResumeUpload({onFileSelect}) {
         role="button"
         tabIndex={0}
       >
-        <span className="upload-icon">📄</span>
+        <span className="upload-icon">{fileName ? fileIcon : "\uD83D\uDCC4"}</span>
         <p className="upload-title">
           <strong>Drag & drop your resume here</strong>
         </p>
-        <p className="upload-subtext">or click to browse (.pdf, .txt)</p>
+        <p className="upload-subtext">or click to browse / paste (Ctrl+V) &mdash; .pdf, .txt</p>
 
         {fileName && (
           <p className="selected-file">
-            Selected: {fileName}
+            <span className="file-info">
+              {fileName}
+              <span className="file-size">({formatFileSize(fileSize)})</span>
+            </span>
+            <button
+              type="button"
+              className="remove-file-btn"
+              onClick={removeFile}
+              title="Remove file"
+            >
+              x
+            </button>
           </p>
         )}
 

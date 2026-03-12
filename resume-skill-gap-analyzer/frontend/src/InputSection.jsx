@@ -2,7 +2,7 @@ import "./cssFile/InputSection.css";
 import ResumeUpload from "./ResumeUpload";
 import GithubUpload from "./GithubUpload";
 import Role from "./Role";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 function InputSection({onError,onAnalyze,obtainedReport}) {
@@ -11,6 +11,19 @@ function InputSection({onError,onAnalyze,obtainedReport}) {
     const [targetRole, setTargetRole] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const formRef = useRef(null);
+
+    // Ctrl+Enter shortcut to submit
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                formRef.current?.requestSubmit();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -57,7 +70,7 @@ function InputSection({onError,onAnalyze,obtainedReport}) {
         }
     };
     return (
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} ref={formRef}>
             <h2 className="section-title">Analyze Your Profile</h2>
             <div className="upload_div">
             <ResumeUpload onFileSelect={setResumeFile}/>

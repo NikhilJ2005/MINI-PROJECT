@@ -9,7 +9,7 @@
 .candidates-table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--card-bg, #fff);
   border-radius: 8px;
   overflow: hidden;
   box-shadow: var(--shadow);
@@ -58,7 +58,7 @@
 }
 
 .delete-btn {
-  background: #fee2e2;
+  background: var(--color-missing-bg);
   color: #dc2626;
 }
 
@@ -67,7 +67,7 @@
 }
 
 .candidate-detail-panel {
-  background: #fff;
+  background: var(--card-bg, #fff);
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-lg);

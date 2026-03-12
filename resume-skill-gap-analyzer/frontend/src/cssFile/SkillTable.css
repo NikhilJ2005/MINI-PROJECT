@@ -21,7 +21,7 @@
 
 .skill-table th {
     padding: 12px 14px;
-    background: white;
+    background: var(--card-bg, white);
     color: var(--text-gray);
     border-bottom: 2px solid var(--color-border);
     font-size: 0.8rem;
