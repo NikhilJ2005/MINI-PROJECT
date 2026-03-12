@@ -1,24 +1,18 @@
 """
 =============================================================================
- ML Model — Logistic Regression + Decision Tree
+ ML Model — Logistic Regression + Decision Tree Ensemble
 =============================================================================
- MODELS: Logistic Regression and Decision Tree ONLY.
+ Two models working together:
+   Logistic Regression → outputs probability 0-1 (confidence score)
+   Decision Tree       → explainable IF/THEN rules
+   Ensemble            → weighted average of both (more robust)
 
- Why these two:
-   Logistic Regression -> outputs probability 0-1 (confidence score)
-   Decision Tree       -> explainable IF/THEN rules + SHAP values
-   Ensemble            -> average both probabilities (more robust)
-
- Improvements over previous version:
-   - Real training data from HuggingFace (with synthetic fallback)
-   - class_weight='balanced' handles imbalanced skill datasets
-   - Cross-validation for honest accuracy reporting
-   - GridSearchCV to find best hyperparameters automatically
-   - SMOTE oversampling if class imbalance is severe
-   - Proper train/test split with stratification
-   - Full metrics: accuracy, precision, recall, F1, ROC-AUC
-   - SHAP explainability for Decision Tree
-   - Model saved to disk, loaded on next startup (faster)
+ Training pipeline:
+   1. Split data 80/20 (stratified to preserve class balance)
+   2. Train both models with class_weight='balanced'
+   3. Evaluate on test set (accuracy, F1, precision, recall, AUC)
+   4. Run 5-fold cross-validation for honest accuracy
+   5. Save models to disk for fast startup next time
 =============================================================================
 """
 
@@ -41,7 +35,6 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import (
-    GridSearchCV,
     StratifiedKFold,
     cross_val_score,
     train_test_split,
@@ -50,23 +43,25 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
-try:
-    from imblearn.over_sampling import SMOTE
-    HAS_SMOTE = True
-except ImportError:
-    HAS_SMOTE = False
+# ─────────────────────────────────────────────────────────────────────
+#  Constants
+# ─────────────────────────────────────────────────────────────────────
+# Ensemble weights: LR gets slightly more weight because it outputs
+# calibrated probabilities; DT is better at capturing edge cases
+LR_WEIGHT = 0.55
+DT_WEIGHT = 0.45
 
-try:
-    import shap
-    HAS_SHAP = True
-except ImportError:
-    HAS_SHAP = False
+# Prediction threshold: above this = model says "candidate has skill"
+PREDICTION_THRESHOLD = 0.5
+
+# The 4 features our model uses for each skill
+FEATURE_NAMES = ['in_resume', 'in_github', 'both_confirmed', 'is_required']
 
 
 class SkillGapMLModel:
     """Trains and runs ML models for skill presence prediction."""
 
-    FEATURE_NAMES = ['in_resume', 'in_github', 'both_confirmed', 'is_required']
+    FEATURE_NAMES = FEATURE_NAMES
 
     def __init__(self) -> None:
         """
@@ -101,66 +96,43 @@ class SkillGapMLModel:
         self.model_save_path = Path("./models_saved")
         self.model_save_path.mkdir(exist_ok=True)
 
-        # Backward-compat accuracy fields used by report_generator
+        # Accuracy fields used by report_generator
         self.lr_accuracy: float = 0.0
         self.dt_accuracy: float = 0.0
 
         logger.info("[MLModel] Initialized Logistic Regression + Decision Tree models.")
 
-    # -----------------------------------------------------------------
-    #  Train Both Models
-    # -----------------------------------------------------------------
+    # =================================================================
+    #  TRAINING
+    # =================================================================
     def train(
         self,
         X: pd.DataFrame,
         y: pd.Series,
         dataset_source: str = "synthetic",
         use_cross_validation: bool = True,
-        tune_hyperparameters: bool = False,
     ) -> Dict:
         """
         Full training pipeline with evaluation.
 
-        Args:
-            X: feature DataFrame with 4 columns
-            y: label Series
-            dataset_source: description of where data came from
-            use_cross_validation: if True, runs 5-fold CV
-            tune_hyperparameters: if True, runs GridSearchCV (slower)
-
-        Returns dict with all metrics for both models.
+        Steps:
+          1. Split data 80/20 (stratified)
+          2. Train both models
+          3. Evaluate on test set
+          4. Run 5-fold cross-validation
+          5. Save models to disk
         """
         self.dataset_source = dataset_source
         logger.info(f"Training on {len(X)} samples from {dataset_source}")
         logger.info(f"Class distribution: {y.value_counts().to_dict()}")
 
-        # -- Handle class imbalance with SMOTE --
-        imbalance_ratio = y.value_counts().max() / max(y.value_counts().min(), 1)
-        if HAS_SMOTE and imbalance_ratio > 1.5 and len(X) > 100:
-            try:
-                k = min(5, y.value_counts().min() - 1)
-                if k >= 1:
-                    smote = SMOTE(random_state=42, k_neighbors=k)
-                    X_balanced, y_balanced = smote.fit_resample(X, y)
-                    logger.info(f"SMOTE applied: {len(X)} -> {len(X_balanced)} samples")
-                    X, y = X_balanced, pd.Series(y_balanced)
-            except Exception as e:
-                logger.warning(f"SMOTE failed, using original: {e}")
-
-        # -- Train/Test Split (stratified) --
+        # -- Train/Test Split (stratified to preserve class balance) --
         X_train, X_test, y_train, y_test = train_test_split(
             X, y,
             test_size=0.20,
             random_state=42,
             stratify=y
         )
-
-        # -- Optional: Hyperparameter Tuning --
-        if tune_hyperparameters:
-            logger.info("Running GridSearchCV...")
-            self.lr_pipeline, self.dt_model = self._tune_hyperparameters(
-                X_train, y_train
-            )
 
         # -- Train Both Models --
         logger.info("Training Logistic Regression...")
@@ -175,11 +147,10 @@ class SkillGapMLModel:
         lr_metrics = self._evaluate(self.lr_pipeline, X_test, y_test, "LR")
         dt_metrics = self._evaluate(self.dt_model, X_test, y_test, "DT")
 
-        # Backward-compat: populate lr_accuracy and dt_accuracy
         self.lr_accuracy = round(lr_metrics['accuracy'] * 100, 2)
         self.dt_accuracy = round(dt_metrics['accuracy'] * 100, 2)
 
-        # -- Cross Validation (5-fold) --
+        # -- Cross Validation (5-fold for honest accuracy) --
         cv_scores = {}
         if use_cross_validation and len(X) >= 50:
             cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
@@ -205,7 +176,6 @@ class SkillGapMLModel:
             'train_samples': len(X_train),
             'test_samples': len(X_test),
             'dataset_source': dataset_source,
-            'smote_applied': imbalance_ratio > 1.5 and HAS_SMOTE,
             'features': self.FEATURE_NAMES,
         }
 
@@ -215,7 +185,7 @@ class SkillGapMLModel:
         return self.metrics
 
     def _evaluate(self, model, X_test: pd.DataFrame, y_test: pd.Series, label: str) -> dict:
-        """Compute full evaluation metrics for one model."""
+        """Compute evaluation metrics for one model."""
         y_pred = model.predict(X_test)
         y_proba = model.predict_proba(X_test)[:, 1]
 
@@ -229,47 +199,15 @@ class SkillGapMLModel:
         }
         return metrics
 
-    def _tune_hyperparameters(self, X_train, y_train):
-        """Run GridSearchCV to find best hyperparameters."""
-        # LR hyperparameter grid
-        lr_param_grid = {
-            'classifier__C': [0.1, 0.5, 1.0, 2.0, 5.0],
-            'classifier__solver': ['lbfgs', 'liblinear']
-        }
-        lr_grid = GridSearchCV(
-            self.lr_pipeline, lr_param_grid,
-            cv=3, scoring='f1', n_jobs=-1, verbose=0
-        )
-        lr_grid.fit(X_train, y_train)
-        best_lr = lr_grid.best_estimator_
-        logger.info(f"Best LR params: {lr_grid.best_params_}")
-
-        # DT hyperparameter grid
-        dt_param_grid = {
-            'max_depth': [3, 4, 5, 6, 7],
-            'min_samples_split': [5, 10, 15, 20],
-            'min_samples_leaf': [2, 4, 6]
-        }
-        dt_grid = GridSearchCV(
-            self.dt_model, dt_param_grid,
-            cv=3, scoring='f1', n_jobs=-1, verbose=0
-        )
-        dt_grid.fit(X_train, y_train)
-        best_dt = dt_grid.best_estimator_
-        logger.info(f"Best DT params: {dt_grid.best_params_}")
-
-        return best_lr, best_dt
-
-    # -----------------------------------------------------------------
-    #  Make Predictions
-    # -----------------------------------------------------------------
+    # =================================================================
+    #  PREDICTION
+    # =================================================================
     def predict(self, X: pd.DataFrame) -> Dict:
         """
-        Run both models and return probabilities + predictions.
-        Ensemble = weighted average of LR and DT probabilities.
+        Run both models and return ensemble predictions.
 
-        Backward compatible: still returns lr_predictions,
-        dt_predictions, lr_probabilities keys.
+        Ensemble = LR_WEIGHT * LR_probability + DT_WEIGHT * DT_probability
+        If ensemble probability > PREDICTION_THRESHOLD → "has skill"
         """
         if not self.is_trained:
             logger.warning("[MLModel] Models not trained yet!")
@@ -281,7 +219,7 @@ class SkillGapMLModel:
                 "ensemble_probabilities": [],
             }
 
-        # Ensure correct feature order, handle missing columns gracefully
+        # Ensure correct feature order
         for col in self.FEATURE_NAMES:
             if col not in X.columns:
                 X[col] = 0
@@ -290,10 +228,8 @@ class SkillGapMLModel:
         lr_proba = self.lr_pipeline.predict_proba(X)[:, 1]
         dt_proba = self.dt_model.predict_proba(X)[:, 1]
 
-        # Ensemble: weighted average (LR slightly higher weight)
-        ensemble_proba = (0.55 * lr_proba) + (0.45 * dt_proba)
-
-        threshold = 0.5
+        # Ensemble: weighted average of both models
+        ensemble_proba = (LR_WEIGHT * lr_proba) + (DT_WEIGHT * dt_proba)
 
         # Round probabilities for cleaner output
         lr_probs_rounded = [round(float(p), 4) for p in lr_proba]
@@ -303,20 +239,21 @@ class SkillGapMLModel:
         logger.debug(f"[MLModel] Generated predictions for {len(X)} skills.")
 
         return {
-            'lr_predictions': (lr_proba >= threshold).astype(int).tolist(),
+            'lr_predictions': (lr_proba >= PREDICTION_THRESHOLD).astype(int).tolist(),
             'lr_probabilities': lr_probs_rounded,
-            'dt_predictions': (dt_proba >= threshold).astype(int).tolist(),
+            'dt_predictions': (dt_proba >= PREDICTION_THRESHOLD).astype(int).tolist(),
             'dt_probabilities': dt_probs_rounded,
-            'ensemble_predictions': (ensemble_proba >= threshold).astype(int).tolist(),
+            'ensemble_predictions': (ensemble_proba >= PREDICTION_THRESHOLD).astype(int).tolist(),
             'ensemble_probabilities': ens_probs_rounded,
         }
 
-    # -----------------------------------------------------------------
-    #  Feature Importance
-    # -----------------------------------------------------------------
+    # =================================================================
+    #  FEATURE IMPORTANCE
+    # =================================================================
     def get_feature_importance(self) -> Dict:
         """
         Feature importance from DT and coefficient magnitude from LR.
+        Shows which of the 4 features matter most for predictions.
         """
         if not self.is_trained:
             return {}
@@ -341,65 +278,13 @@ class SkillGapMLModel:
             )
         }
 
-    # -----------------------------------------------------------------
-    #  SHAP Explainability
-    # -----------------------------------------------------------------
-    def get_shap_values(self, X: pd.DataFrame) -> dict:
-        """
-        SHAP values for Decision Tree predictions.
-        Explains WHY the model made each prediction.
-        """
-        if not self.is_trained or not HAS_SHAP:
-            return {'shap_available': False, 'reason': 'SHAP not available'}
-
-        try:
-            for col in self.FEATURE_NAMES:
-                if col not in X.columns:
-                    X[col] = 0
-            X = X[self.FEATURE_NAMES]
-
-            explainer = shap.TreeExplainer(self.dt_model)
-            shap_vals = explainer.shap_values(X)
-
-            # Multi-class DT returns list — take class 1 (positive)
-            if isinstance(shap_vals, list):
-                shap_vals = shap_vals[1]
-
-            per_feature_mean = {
-                feat: round(float(abs(shap_vals[:, i]).mean()), 4)
-                for i, feat in enumerate(self.FEATURE_NAMES)
-            }
-
-            base_val = explainer.expected_value
-            if isinstance(base_val, list):
-                base_val = base_val[1]
-
-            return {
-                'shap_available': True,
-                'shap_values': shap_vals.tolist(),
-                'base_value': float(base_val),
-                'feature_names': self.FEATURE_NAMES,
-                'per_feature_mean': per_feature_mean,
-                'explanation': (
-                    "SHAP values show each feature's contribution "
-                    "to the prediction. Positive = pushes toward "
-                    "'skill present', negative = pushes toward gap."
-                )
-            }
-        except Exception as e:
-            logger.warning(f"SHAP computation failed: {e}")
-            return {'shap_available': False, 'reason': str(e)}
-
-    # -----------------------------------------------------------------
-    #  Model Summary (Backward Compatible)
-    # -----------------------------------------------------------------
+    # =================================================================
+    #  MODEL SUMMARY
+    # =================================================================
     def get_model_summary(self) -> Dict:
         """
-        Generate a human-readable summary of both models.
-        Maintains backward compatibility with report_generator.py
-        which expects: models_used, lr_accuracy, dt_accuracy,
-        feature_importance, lr_explanation, dt_explanation,
-        training_explanation.
+        Human-readable summary of both models.
+        Used by report_generator.py for the ML insights section.
         """
         return {
             "models_used": ["Logistic Regression", "Decision Tree"],
@@ -421,9 +306,9 @@ class SkillGapMLModel:
                 "trace exactly why each decision was made."
             ),
             "ensemble_explanation": (
-                "Final score = 55% LR + 45% DT. Combining both "
-                "models reduces individual errors and gives more "
-                "reliable predictions."
+                f"Final score = {int(LR_WEIGHT*100)}% LR + {int(DT_WEIGHT*100)}% DT. "
+                "Combining both models reduces individual errors "
+                "and gives more reliable predictions."
             ),
             "training_explanation": (
                 f"Both models were trained on data from {self.dataset_source}. "
@@ -435,9 +320,9 @@ class SkillGapMLModel:
             "feature_names": self.FEATURE_NAMES,
         }
 
-    # -----------------------------------------------------------------
-    #  Logging
-    # -----------------------------------------------------------------
+    # =================================================================
+    #  LOGGING
+    # =================================================================
     def _log_training_results(self):
         """Log a clean training summary to console."""
         lr = self.metrics.get('lr', {})
@@ -474,9 +359,9 @@ class SkillGapMLModel:
         )
         logger.info("=" * 50)
 
-    # -----------------------------------------------------------------
-    #  Model Persistence
-    # -----------------------------------------------------------------
+    # =================================================================
+    #  SAVE / LOAD MODELS
+    # =================================================================
     def save_models(self):
         """Save both models to disk with joblib."""
         try:
@@ -484,7 +369,6 @@ class SkillGapMLModel:
                         self.model_save_path / "lr_model.pkl")
             joblib.dump(self.dt_model,
                         self.model_save_path / "dt_model.pkl")
-            # Save metrics as JSON
             with open(self.model_save_path / "metrics.json", "w") as f:
                 json.dump(self.metrics, f, indent=2)
             logger.info(f"Models saved to {self.model_save_path}")
@@ -495,7 +379,7 @@ class SkillGapMLModel:
         """
         Load previously saved models from disk.
         Faster than retraining on every startup.
-        Returns True if loaded successfully, False otherwise.
+        Returns True if loaded successfully.
         """
         try:
             lr_path = self.model_save_path / "lr_model.pkl"
@@ -516,7 +400,6 @@ class SkillGapMLModel:
                     'dataset_source', 'loaded from disk'
                 )
 
-            # Restore backward-compat accuracy fields
             self.lr_accuracy = round(
                 self.metrics.get('lr', {}).get('accuracy', 0) * 100, 2
             )

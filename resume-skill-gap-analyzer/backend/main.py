@@ -17,7 +17,6 @@
 =============================================================================
 """
 
-import asyncio
 import json
 import os
 import re
@@ -48,71 +47,24 @@ load_dotenv()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 # ---------------------------------------------------------------------------
-#  Global State (loaded on startup)
+#  Application State — all pipeline components in one place
 # ---------------------------------------------------------------------------
-job_roles_data: Dict = {}
-skills_master: Dict[str, List[str]] = {}
-resume_parser: ResumeParser = None      # type: ignore
-github_analyzer: GitHubAnalyzer = None  # type: ignore
-feature_engineer: FeatureEngineer = None  # type: ignore
-ml_model: SkillGapMLModel = None        # type: ignore
-skill_gap_analyzer: SkillGapAnalyzer = None  # type: ignore
-report_generator: ReportGenerator = None    # type: ignore
-dataset_loader: DatasetLoader = None    # type: ignore
-db: Database = None                      # type: ignore
+class AppState:
+    """Holds all pipeline components. Initialized once at startup."""
+    def __init__(self):
+        self.job_roles_data: Dict = {}
+        self.skills_master: Dict[str, List[str]] = {}
+        self.resume_parser: ResumeParser = None          # type: ignore
+        self.github_analyzer: GitHubAnalyzer = None      # type: ignore
+        self.feature_engineer: FeatureEngineer = None    # type: ignore
+        self.ml_model: SkillGapMLModel = None            # type: ignore
+        self.skill_gap_analyzer: SkillGapAnalyzer = None # type: ignore
+        self.report_generator: ReportGenerator = None    # type: ignore
+        self.dataset_loader: DatasetLoader = None        # type: ignore
+        self.db: Database = None                         # type: ignore
+        self.last_retrain_time: float = 0.0
 
-_last_retrain_time: float = 0.0
-_extractor_validation: dict = {}
-
-
-# ---------------------------------------------------------------------------
-#  Background Task: Validate Skill Extractor
-# ---------------------------------------------------------------------------
-async def _validate_extractor_background():
-    global _extractor_validation
-    try:
-        results = dataset_loader.validate_skill_extractor(
-            parser=resume_parser, sample_size=50
-        )
-        _extractor_validation = results
-        logger.info(
-            f"Skill extractor validation: "
-            f"avg {results.get('avg_skills_per_resume', 0)} skills/resume"
-        )
-    except Exception as e:
-        logger.warning(f"Extractor validation failed: {e}")
-        _extractor_validation = {"validated": False, "reason": str(e)}
-
-
-# ---------------------------------------------------------------------------
-#  Startup Banner
-# ---------------------------------------------------------------------------
-def _print_startup_banner():
-    lr_metrics = ml_model.metrics.get('lr', {})
-    dt_metrics = ml_model.metrics.get('dt', {})
-    total_skills = sum(len(v) for v in skills_master.values())
-
-    lr_acc = f"{ml_model.lr_accuracy}%"
-    lr_f1 = f"{lr_metrics.get('f1', 0):.3f}"
-    dt_acc = f"{ml_model.dt_accuracy}%"
-    dt_f1 = f"{dt_metrics.get('f1', 0):.3f}"
-    source = ml_model.dataset_source
-    candidates = db.get_candidate_count()
-
-    logger.info("")
-    logger.info("+" + "=" * 56 + "+")
-    logger.info("|     Automated Recruiting Platform  v2.0.0              |")
-    logger.info("+" + "=" * 56 + "+")
-    logger.info(f"|  Status     : Running                                  |")
-    logger.info(f"|  Dataset    : {source:<42s}|")
-    logger.info(f"|  LR Model   : Acc {lr_acc:<6s} F1 {lr_f1:<28s}|")
-    logger.info(f"|  DT Model   : Acc {dt_acc:<6s} F1 {dt_f1:<28s}|")
-    logger.info(f"|  Skills     : {total_skills} loaded{' ' * (36 - len(str(total_skills)))}|")
-    logger.info(f"|  Roles      : {len(job_roles_data)} loaded{' ' * (36 - len(str(len(job_roles_data))))}|")
-    logger.info(f"|  Candidates : {candidates} in database{' ' * (31 - len(str(candidates)))}|")
-    logger.info(f"|  Docs       : http://localhost:8000/docs               |")
-    logger.info("+" + "=" * 56 + "+")
-    logger.info("")
+state = AppState()
 
 
 # ---------------------------------------------------------------------------
@@ -120,61 +72,56 @@ def _print_startup_banner():
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global job_roles_data, skills_master
-    global resume_parser, github_analyzer, feature_engineer
-    global ml_model, skill_gap_analyzer, report_generator
-    global dataset_loader, db
-
     logger.info("AUTOMATED RECRUITING PLATFORM — Starting Up")
 
     # Load data files
     data_dir = os.path.join(os.path.dirname(__file__), "data")
 
     with open(os.path.join(data_dir, "job_roles.json"), "r") as f:
-        job_roles_data = json.load(f)
-    logger.info(f"Loaded {len(job_roles_data)} job roles.")
+        state.job_roles_data = json.load(f)
+    logger.info(f"Loaded {len(state.job_roles_data)} job roles.")
 
     with open(os.path.join(data_dir, "skills_master.json"), "r") as f:
-        skills_master = json.load(f)
-    total_skills = sum(len(v) for v in skills_master.values())
-    logger.info(f"Loaded {total_skills} skills across {len(skills_master)} categories.")
+        state.skills_master = json.load(f)
+    total_skills = sum(len(v) for v in state.skills_master.values())
+    logger.info(f"Loaded {total_skills} skills across {len(state.skills_master)} categories.")
 
     # Pre-compile regex patterns for skill matching (used across all modules)
-    compiled_patterns = compile_skill_patterns(skills_master)
+    compiled_patterns = compile_skill_patterns(state.skills_master)
     set_compiled_patterns(compiled_patterns)
     logger.info(f"Pre-compiled {len(compiled_patterns)} skill regex patterns.")
 
     # Flatten skills_master once for reuse across modules
-    set_flat_skills(skills_master)
+    set_flat_skills(state.skills_master)
 
-    # Initialize modules
+    # Initialize pipeline modules
     logger.info("Initializing pipeline modules...")
-    resume_parser = ResumeParser()
-    github_analyzer = GitHubAnalyzer(github_token=GITHUB_TOKEN if GITHUB_TOKEN else None)
-    feature_engineer = FeatureEngineer()
-    ml_model = SkillGapMLModel()
-    skill_gap_analyzer = SkillGapAnalyzer()
-    report_generator = ReportGenerator()
-    dataset_loader = DatasetLoader()
-    db = Database()
+    state.resume_parser = ResumeParser()
+    state.github_analyzer = GitHubAnalyzer(github_token=GITHUB_TOKEN if GITHUB_TOKEN else None)
+    state.feature_engineer = FeatureEngineer()
+    state.ml_model = SkillGapMLModel()
+    state.skill_gap_analyzer = SkillGapAnalyzer()
+    state.report_generator = ReportGenerator()
+    state.dataset_loader = DatasetLoader()
+    state.db = Database()
 
-    # Load or train models
-    models_loaded = ml_model.load_models()
+    # Load saved models or train fresh
+    models_loaded = state.ml_model.load_models()
     if not models_loaded:
         logger.info("Training ML models from scratch...")
-        X, y, source = dataset_loader.load_training_data()
-        ml_model.train(X, y, dataset_source=source, use_cross_validation=True, tune_hyperparameters=False)
+        X, y, source = state.dataset_loader.load_training_data()
+        state.ml_model.train(X, y, dataset_source=source, use_cross_validation=True)
     else:
         logger.info("Using cached models — skipping retraining")
 
-    asyncio.create_task(_validate_extractor_background())
-    _print_startup_banner()
+    logger.info(f"Server ready | LR acc: {state.ml_model.lr_accuracy}% | "
+                f"DT acc: {state.ml_model.dt_accuracy}% | "
+                f"Roles: {len(state.job_roles_data)} | Skills: {total_skills}")
 
     yield
 
-    # Close async HTTP client
-    if github_analyzer:
-        await github_analyzer.close()
+    if state.github_analyzer:
+        await state.github_analyzer.close()
     logger.info("Shutting down Automated Recruiting Platform.")
 
 
@@ -240,44 +187,44 @@ async def _run_single_analysis(
 
     if github_username:
         try:
-            github_result = await github_analyzer.analyze_github_profile(github_username, skills_master)
+            github_result = await state.github_analyzer.analyze_github_profile(github_username, state.skills_master)
             demonstrated_skills = github_result["demonstrated_skills"]
         except Exception as e:
             github_result["error"] = str(e)
 
     # Feature engineering
-    role_data = job_roles_data[target_role]
-    skill_matrix = feature_engineer.create_skill_matrix(
+    role_data = state.job_roles_data[target_role]
+    skill_matrix = state.feature_engineer.create_skill_matrix(
         claimed_skills,
         demonstrated_skills,
         role_data["required_skills"],
         role_data.get("nice_to_have", []),
     )
-    X, y = feature_engineer.encode_for_model(skill_matrix)
+    X, y = state.feature_engineer.encode_for_model(skill_matrix)
 
     # ML predictions
-    predictions = ml_model.predict(X)
+    predictions = state.ml_model.predict(X)
     lr_probabilities = predictions["lr_probabilities"]
 
     # Skill gap analysis
-    analysis = skill_gap_analyzer.analyze(
+    analysis = state.skill_gap_analyzer.analyze(
         claimed_skills=claimed_skills,
         demonstrated_skills=demonstrated_skills,
         target_role=target_role,
-        job_roles_data=job_roles_data,
+        job_roles_data=state.job_roles_data,
         ml_predictions=predictions,
         lr_probabilities=lr_probabilities,
         skill_matrix=skill_matrix,
     )
 
     # Report
-    report = report_generator.generate_report(
+    report = state.report_generator.generate_report(
         analysis_result=analysis,
         target_role=target_role,
         github_username=github_username,
         resume_skills=claimed_skills,
         github_skills=demonstrated_skills,
-        model_summary=ml_model.get_model_summary(),
+        model_summary=state.ml_model.get_model_summary(),
         github_insights_data=github_result,
     )
 
@@ -302,12 +249,12 @@ async def _run_single_analysis(
 # ---------------------------------------------------------------------------
 @app.get("/")
 async def health_check():
-    stats = db.get_dashboard_stats()
+    stats = state.db.get_dashboard_stats()
     return {
         "status": "running",
         "message": "Automated Recruiting Platform API",
         "version": "2.0.0",
-        "available_roles": list(job_roles_data.keys()),
+        "available_roles": list(state.job_roles_data.keys()),
         "total_candidates": stats["total_candidates"],
         "total_analyses": stats["total_analyses"],
     }
@@ -318,7 +265,7 @@ async def health_check():
 # ---------------------------------------------------------------------------
 @app.get("/dashboard")
 async def get_dashboard():
-    stats = db.get_dashboard_stats()
+    stats = state.db.get_dashboard_stats()
     return stats
 
 
@@ -328,7 +275,7 @@ async def get_dashboard():
 @app.get("/job-roles")
 async def get_job_roles():
     roles = []
-    for role_name, role_data in job_roles_data.items():
+    for role_name, role_data in state.job_roles_data.items():
         roles.append({
             "name": role_name,
             "required_skills": role_data["required_skills"],
@@ -342,7 +289,7 @@ async def get_job_roles():
 # ---------------------------------------------------------------------------
 @app.get("/skills-master")
 async def get_skills_master():
-    return {"skills_master": skills_master}
+    return {"skills_master": state.skills_master}
 
 
 # ---------------------------------------------------------------------------
@@ -361,13 +308,13 @@ async def analyze(
     if not filename.lower().endswith((".pdf", ".txt")):
         raise HTTPException(400, "Unsupported file type. Upload .pdf or .txt.")
 
-    if target_role not in job_roles_data:
-        raise HTTPException(400, f"Unknown role: '{target_role}'. Available: {list(job_roles_data.keys())}")
+    if target_role not in state.job_roles_data:
+        raise HTTPException(400, f"Unknown role: '{target_role}'. Available: {list(state.job_roles_data.keys())}")
 
     # Parse resume
     file_bytes = await resume_file.read()
     try:
-        resume_result = resume_parser.parse(file_bytes, filename, skills_master)
+        resume_result = state.resume_parser.parse(file_bytes, filename, state.skills_master)
     except Exception as e:
         raise HTTPException(422, f"Resume parsing failed: {e}")
 
@@ -393,7 +340,7 @@ async def analyze(
         raise HTTPException(500, f"Analysis failed: {e}")
 
     # Save to database
-    candidate_id = db.insert_candidate({
+    candidate_id = state.db.insert_candidate({
         "name": personal_info.get("name", ""),
         "email": personal_info.get("email", ""),
         "phone": personal_info.get("phone", ""),
@@ -406,7 +353,7 @@ async def analyze(
         "extracted_skills": claimed_skills,
     })
 
-    analysis_id = db.insert_analysis({
+    analysis_id = state.db.insert_analysis({
         "candidate_id": candidate_id,
         "target_role": target_role,
         "match_score": result["analysis"]["match_score"],
@@ -433,13 +380,13 @@ async def analyze(
 async def analyze_text(request: TextAnalyzeRequest):
     logger.info(f"TEXT ANALYSIS | GitHub: {request.github_username} | Role: {request.target_role}")
 
-    if request.target_role not in job_roles_data:
+    if request.target_role not in state.job_roles_data:
         raise HTTPException(400, f"Unknown role: '{request.target_role}'.")
     if not request.resume_text.strip():
         raise HTTPException(400, "Resume text cannot be empty.")
 
-    claimed_skills = resume_parser.extract_skills(request.resume_text, skills_master)
-    personal_info = resume_parser.extract_personal_info(request.resume_text)
+    claimed_skills = state.resume_parser.extract_skills(request.resume_text, state.skills_master)
+    personal_info = state.resume_parser.extract_personal_info(request.resume_text)
 
     github_username = request.github_username
     if not github_username and personal_info.get("github_username"):
@@ -457,7 +404,7 @@ async def analyze_text(request: TextAnalyzeRequest):
         raise HTTPException(500, f"Analysis failed: {e}")
 
     # Save to database
-    candidate_id = db.insert_candidate({
+    candidate_id = state.db.insert_candidate({
         "name": personal_info.get("name", ""),
         "email": personal_info.get("email", ""),
         "phone": personal_info.get("phone", ""),
@@ -469,7 +416,7 @@ async def analyze_text(request: TextAnalyzeRequest):
         "extracted_skills": claimed_skills,
     })
 
-    analysis_id = db.insert_analysis({
+    analysis_id = state.db.insert_analysis({
         "candidate_id": candidate_id,
         "target_role": request.target_role,
         "match_score": result["analysis"]["match_score"],
@@ -498,7 +445,7 @@ async def analyze_batch(
     Analyze multiple resumes at once. Returns a ranked list of candidates.
     GitHub usernames are auto-extracted from resume content.
     """
-    if target_role not in job_roles_data:
+    if target_role not in state.job_roles_data:
         raise HTTPException(400, f"Unknown role: '{target_role}'.")
 
     if len(resume_files) > 50:
@@ -506,7 +453,7 @@ async def analyze_batch(
 
     logger.info(f"BATCH ANALYSIS | {len(resume_files)} resumes | Role: {target_role}")
 
-    batch_id = db.create_batch_job(target_role, len(resume_files))
+    batch_id = state.db.create_batch_job(target_role, len(resume_files))
     results = []
     errors = []
 
@@ -520,7 +467,7 @@ async def analyze_batch(
 
         try:
             file_bytes = await resume_file.read()
-            resume_result = resume_parser.parse(file_bytes, filename, skills_master)
+            resume_result = state.resume_parser.parse(file_bytes, filename, state.skills_master)
             claimed_skills = resume_result["extracted_skills"]
             personal_info = resume_result.get("personal_info", {})
             github_username = personal_info.get("github_username", "")
@@ -535,7 +482,7 @@ async def analyze_batch(
             )
 
             # Save candidate
-            candidate_id = db.insert_candidate({
+            candidate_id = state.db.insert_candidate({
                 "name": personal_info.get("name", filename),
                 "email": personal_info.get("email", ""),
                 "phone": personal_info.get("phone", ""),
@@ -548,7 +495,7 @@ async def analyze_batch(
                 "extracted_skills": claimed_skills,
             })
 
-            analysis_id = db.insert_analysis({
+            analysis_id = state.db.insert_analysis({
                 "candidate_id": candidate_id,
                 "target_role": target_role,
                 "match_score": result["analysis"]["match_score"],
@@ -585,9 +532,9 @@ async def analyze_batch(
     # Assign ranks and save batch results
     for rank, r in enumerate(results, 1):
         r["rank"] = rank
-        db.add_batch_result(batch_id, r["candidate_id"], r["analysis_id"], rank)
+        state.db.add_batch_result(batch_id, r["candidate_id"], r["analysis_id"], rank)
 
-    db.complete_batch_job(batch_id)
+    state.db.complete_batch_job(batch_id)
 
     logger.info(f"Batch complete! {len(results)} analyzed, {len(errors)} errors")
 
@@ -607,7 +554,7 @@ async def analyze_batch(
 # ---------------------------------------------------------------------------
 @app.get("/batch/{batch_id}")
 async def get_batch(batch_id: int):
-    job = db.get_batch_job(batch_id)
+    job = state.db.get_batch_job(batch_id)
     if not job:
         raise HTTPException(404, "Batch job not found.")
     return job
@@ -618,8 +565,8 @@ async def get_batch(batch_id: int):
 # ---------------------------------------------------------------------------
 @app.get("/candidates")
 async def get_candidates(limit: int = 100, offset: int = 0):
-    candidates = db.get_all_candidates(limit, offset)
-    total = db.get_candidate_count()
+    candidates = state.db.get_all_candidates(limit, offset)
+    total = state.db.get_candidate_count()
     return {"candidates": candidates, "total": total}
 
 
@@ -628,10 +575,10 @@ async def get_candidates(limit: int = 100, offset: int = 0):
 # ---------------------------------------------------------------------------
 @app.get("/candidates/{candidate_id}")
 async def get_candidate(candidate_id: int):
-    candidate = db.get_candidate(candidate_id)
+    candidate = state.db.get_candidate(candidate_id)
     if not candidate:
         raise HTTPException(404, "Candidate not found.")
-    analyses = db.get_analyses_for_candidate(candidate_id)
+    analyses = state.db.get_analyses_for_candidate(candidate_id)
     return {"candidate": candidate, "analyses": analyses}
 
 
@@ -640,7 +587,7 @@ async def get_candidate(candidate_id: int):
 # ---------------------------------------------------------------------------
 @app.delete("/candidates/{candidate_id}")
 async def delete_candidate(candidate_id: int):
-    if db.delete_candidate(candidate_id):
+    if state.db.delete_candidate(candidate_id):
         return {"status": "deleted", "candidate_id": candidate_id}
     raise HTTPException(404, "Candidate not found.")
 
@@ -650,9 +597,9 @@ async def delete_candidate(candidate_id: int):
 # ---------------------------------------------------------------------------
 @app.get("/rankings/{target_role}")
 async def get_rankings(target_role: str, limit: int = 50):
-    if target_role not in job_roles_data:
+    if target_role not in state.job_roles_data:
         raise HTTPException(400, f"Unknown role: '{target_role}'.")
-    rankings = db.get_ranked_candidates(target_role, limit)
+    rankings = state.db.get_ranked_candidates(target_role, limit)
     return {"target_role": target_role, "rankings": rankings}
 
 
@@ -665,15 +612,15 @@ async def compare_candidates(request: CompareRequest):
         raise HTTPException(400, "Provide at least 2 candidate IDs.")
     if len(request.candidate_ids) > 5:
         raise HTTPException(400, "Maximum 5 candidates for comparison.")
-    if request.target_role not in job_roles_data:
+    if request.target_role not in state.job_roles_data:
         raise HTTPException(400, f"Unknown role: '{request.target_role}'.")
 
-    comparisons = db.get_candidates_comparison(
+    comparisons = state.db.get_candidates_comparison(
         request.candidate_ids, request.target_role
     )
 
     # Build comparison matrix
-    role_data = job_roles_data[request.target_role]
+    role_data = state.job_roles_data[request.target_role]
     all_skills = role_data["required_skills"] + role_data.get("nice_to_have", [])
 
     skill_matrix = {}
@@ -728,7 +675,7 @@ async def parse_job_description(request: JobDescriptionRequest):
                 found_skills.add(skill)
     else:
         all_skills = []
-        for category, skills in skills_master.items():
+        for category, skills in state.skills_master.items():
             all_skills.extend(skills)
         for skill in all_skills:
             pat = r"\b" + re.escape(skill.lower()) + r"\b"
@@ -773,7 +720,7 @@ async def parse_job_description(request: JobDescriptionRequest):
     role_name = request.role_name or "Custom Role"
 
     if role_name and required_skills:
-        job_roles_data[role_name] = {
+        state.job_roles_data[role_name] = {
             "required_skills": required_skills,
             "nice_to_have": nice_to_have,
         }
@@ -783,7 +730,7 @@ async def parse_job_description(request: JobDescriptionRequest):
         "required_skills": sorted(required_skills),
         "nice_to_have": sorted(nice_to_have),
         "total_skills_found": len(found_skills),
-        "added_to_roles": role_name in job_roles_data,
+        "added_to_roles": role_name in state.job_roles_data,
     }
 
 
@@ -793,14 +740,14 @@ async def parse_job_description(request: JobDescriptionRequest):
 @app.get("/analysis-history")
 async def get_analysis_history(limit: int = 50):
     """Get recent analyses for the history sidebar."""
-    analyses = db.get_recent_analyses(limit)
+    analyses = state.db.get_recent_analyses(limit)
     return {"analyses": analyses}
 
 
 @app.get("/analysis/{analysis_id}")
 async def get_analysis_detail(analysis_id: int):
     """Get full analysis report by ID."""
-    analysis = db.get_analysis_by_id(analysis_id)
+    analysis = state.db.get_analysis_by_id(analysis_id)
     if not analysis:
         raise HTTPException(404, "Analysis not found.")
     # Return the stored report_json as the full report
@@ -815,8 +762,8 @@ async def get_analysis_detail(analysis_id: int):
 # ---------------------------------------------------------------------------
 @app.get("/model-metrics")
 async def get_model_metrics():
-    summary = ml_model.get_model_summary()
-    summary["feature_importance"] = ml_model.get_feature_importance()
+    summary = state.ml_model.get_model_summary()
+    summary["feature_importance"] = state.ml_model.get_feature_importance()
     return summary
 
 
@@ -824,22 +771,17 @@ async def get_model_metrics():
 #  ENDPOINT: Model Retrain
 # ---------------------------------------------------------------------------
 @app.get("/model-retrain")
-async def retrain_model(tune: bool = False):
-    global _last_retrain_time
-
+async def retrain_model():
     now = time.time()
-    if now - _last_retrain_time < 3600:
-        remaining = int(3600 - (now - _last_retrain_time))
+    if now - state.last_retrain_time < 3600:
+        remaining = int(3600 - (now - state.last_retrain_time))
         raise HTTPException(429, f"Retrain rate limited. Try again in {remaining}s.")
 
     logger.info("Retraining ML models with fresh data...")
-    _last_retrain_time = now
+    state.last_retrain_time = now
 
-    X, y, source = dataset_loader.load_training_data()
-    metrics = ml_model.train(
-        X, y, dataset_source=source,
-        use_cross_validation=True, tune_hyperparameters=tune,
-    )
+    X, y, source = state.dataset_loader.load_training_data()
+    metrics = state.ml_model.train(X, y, dataset_source=source, use_cross_validation=True)
     return {"status": "retrained", "dataset_source": source, "metrics": metrics}
 
 
@@ -848,20 +790,9 @@ async def retrain_model(tune: bool = False):
 # ---------------------------------------------------------------------------
 @app.get("/dataset-status")
 async def get_dataset_status():
-    cache_dir = dataset_loader.cache_dir
-    cached_datasets = []
-    if os.path.exists(cache_dir):
-        for item in os.listdir(cache_dir):
-            if os.path.isdir(os.path.join(cache_dir, item)):
-                cached_datasets.append(item)
-
     return {
-        "huggingface_available": len(cached_datasets) > 0,
-        "cached_datasets": cached_datasets,
-        "training_data_source": ml_model.dataset_source,
-        "cache_dir": cache_dir,
-        "extractor_validation": _extractor_validation,
-        "model_trained": ml_model.is_trained,
+        "training_data_source": state.ml_model.dataset_source,
+        "model_trained": state.ml_model.is_trained,
     }
 
 
