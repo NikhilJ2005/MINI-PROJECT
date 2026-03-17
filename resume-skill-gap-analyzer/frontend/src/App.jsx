@@ -154,7 +154,7 @@ function App() {
             <>
               <section className="input-section">
                 <InputSection
-                  err={setError}
+                  onError={setError}
                   onAnalyze={setLoading}
                   obtainedReport={handleReportReceived}
                 />
