@@ -10,8 +10,9 @@ import Papa from "papaparse";
 import "./cssFile/Results.css";
 
 const Results = memo(function Results({ report }) {
-    const ml_insights = report.ml_insights;
-    const git_insights = report.github_insights;
+    if (!report) return null;
+    const ml_insights = report.ml_insights || {};
+    const git_insights = report.github_insights || {};
     const maxLang = git_insights?.top_languages?.[0]?.bytes || 1;
     const resultsRef = useRef(null);
 
@@ -34,7 +35,8 @@ const Results = memo(function Results({ report }) {
             const role = report.target_role || "Role";
             pdf.save(`SkillGap_${name}_${role}.pdf`);
             showToast("PDF downloaded!", "success");
-        } catch {
+        } catch (err) {
+            console.error("PDF generation error:", err);
             showToast("PDF generation failed", "error");
         }
     }, [report]);
@@ -65,9 +67,12 @@ const Results = memo(function Results({ report }) {
         showToast("CSV exported!", "success");
     }, [report]);
 
+    const skillBreakdown = report.skill_breakdown || {};
+    const recommendations = report.recommendations || [];
+
     return (
-        <section className="results-section" ref={resultsRef}>
-            {/* Export buttons */}
+        <>
+            {/* Export buttons — outside ref so they don't appear in PDF */}
             <div className="export-bar">
                 <button className="export-btn export-pdf" onClick={handleExportPDF}>
                     Export PDF
@@ -77,80 +82,97 @@ const Results = memo(function Results({ report }) {
                 </button>
             </div>
 
-            <ScoreCard report={report} />
-            <Summary summary={report.executive_summary} />
+            <section className="results-section" ref={resultsRef}>
+                <ScoreCard report={report} />
+                {report.executive_summary && <Summary summary={report.executive_summary} />}
 
-            {/* Skill Radar Chart */}
-            <SkillRadarChart report={report} />
+                {/* Skill Radar Chart */}
+                <SkillRadarChart report={report} />
 
-            <div className="skill-breakdown">
-                <h2>Skill Breakdown</h2>
-                <SkillTable title="Required Skills" analysis={report.skill_breakdown.required_analysis} />
-                <SkillTable title="Nice to have Skills" analysis={report.skill_breakdown.nice_to_have_analysis} />
-            </div>
-            <div className="recommendations">
-                <h3>Recommendations</h3>
-                {report.recommendations.map((item, index) => (
-                    <div className="recommendation-item" key={index}>
-                        <span className={`badge badge-${item.priority}`}>{item.priority}</span>
-                        <div className="recommendation-content">
-                            <div className="recommended-action">{item.action}</div>
-                            <div className="recommended-hints">{item.resource_hint}</div>
-                        </div>
+                {(skillBreakdown.required_analysis || skillBreakdown.nice_to_have_analysis) && (
+                    <div className="skill-breakdown">
+                        <h2>Skill Breakdown</h2>
+                        <SkillTable title="Required Skills" analysis={skillBreakdown.required_analysis} />
+                        <SkillTable title="Nice to have Skills" analysis={skillBreakdown.nice_to_have_analysis} />
                     </div>
-                ))}
-            </div>
-            <div className="ml-insights">
-                <h3>ML Model Insights</h3>
-                <div className="ml-insights-container">
-                    <div className="ml-grid">
-                        <div className="ml-metric">
-                            <div className="metric-value">{ml_insights.lr_accuracy}%</div>
-                            <div className="metric-label">Logistic Regression Accuracy</div>
-                        </div>
-                        <div className="ml-metric">
-                            <div className="metric-value">{ml_insights.dt_accuracy}%</div>
-                            <div className="metric-label">Decision Tree Accuracy</div>
-                        </div>
-                    </div>
-                    <div className="ml-explanation">
-                        <strong>How it works: </strong>
-                        {ml_insights.model_explanation}
-                    </div>
-                    <div className="ml-explanation">
-                        <strong>Logistic Regression: </strong>
-                        {ml_insights.lr_explanation}
-                    </div>
-                    <div className="ml-explanation">
-                        <strong>Decision Tree: </strong>
-                        {ml_insights.dt_explanation}
-                    </div>
-                </div>
-            </div>
-            <div className="github-insights">
-                <h3>GitHub Insights</h3>
-                <div className="github-insights-container">
-                    <div className="github-stat">
-                        <span className="github-stat-label">Repositories Analyzed</span>
-                        <span className="github-stat-value">{git_insights.repos_analyzed}</span>
-                    </div>
-                    {git_insights?.top_languages?.length > 0 && (
-                        <>
-                            <h4>Top Languages</h4>
-                            {git_insights.top_languages.map((item, index) => (
-                                <div className="language-bar" key={index}>
-                                    <span className="language-bar-name">{item.language}</span>
-                                    <div className="language-bar-track">
-                                        <div className="language-bar-fill" style={{ width: `${(item.bytes / maxLang) * 100}%` }}></div>
-                                    </div>
-                                    <span className="language-bar-bytes">{(item.bytes / 1000).toFixed(1)} KB</span>
+                )}
+
+                {recommendations.length > 0 && (
+                    <div className="recommendations">
+                        <h3>Recommendations</h3>
+                        {recommendations.map((item, index) => (
+                            <div className="recommendation-item" key={index}>
+                                <span className={`badge badge-${item.priority}`}>{item.priority}</span>
+                                <div className="recommendation-content">
+                                    <div className="recommended-action">{item.action}</div>
+                                    <div className="recommended-hints">{item.resource_hint}</div>
                                 </div>
-                            ))}
-                        </>
-                    )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {ml_insights.lr_accuracy != null && (
+                    <div className="ml-insights">
+                        <h3>ML Model Insights</h3>
+                        <div className="ml-insights-container">
+                            <div className="ml-grid">
+                                <div className="ml-metric">
+                                    <div className="metric-value">{ml_insights.lr_accuracy}%</div>
+                                    <div className="metric-label">Logistic Regression Accuracy</div>
+                                </div>
+                                <div className="ml-metric">
+                                    <div className="metric-value">{ml_insights.dt_accuracy}%</div>
+                                    <div className="metric-label">Decision Tree Accuracy</div>
+                                </div>
+                            </div>
+                            {ml_insights.model_explanation && (
+                                <div className="ml-explanation">
+                                    <strong>How it works: </strong>
+                                    {ml_insights.model_explanation}
+                                </div>
+                            )}
+                            {ml_insights.lr_explanation && (
+                                <div className="ml-explanation">
+                                    <strong>Logistic Regression: </strong>
+                                    {ml_insights.lr_explanation}
+                                </div>
+                            )}
+                            {ml_insights.dt_explanation && (
+                                <div className="ml-explanation">
+                                    <strong>Decision Tree: </strong>
+                                    {ml_insights.dt_explanation}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <div className="github-insights">
+                    <h3>GitHub Insights</h3>
+                    <div className="github-insights-container">
+                        <div className="github-stat">
+                            <span className="github-stat-label">Repositories Analyzed</span>
+                            <span className="github-stat-value">{git_insights.repos_analyzed || 0}</span>
+                        </div>
+                        {git_insights?.top_languages?.length > 0 && (
+                            <>
+                                <h4>Top Languages</h4>
+                                {git_insights.top_languages.map((item, index) => (
+                                    <div className="language-bar" key={index}>
+                                        <span className="language-bar-name">{item.language}</span>
+                                        <div className="language-bar-track">
+                                            <div className="language-bar-fill" style={{ width: `${(item.bytes / maxLang) * 100}%` }}></div>
+                                        </div>
+                                        <span className="language-bar-bytes">{(item.bytes / 1000).toFixed(1)} KB</span>
+                                    </div>
+                                ))}
+                            </>
+                        )}
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        </>
     );
 });
 export default Results;

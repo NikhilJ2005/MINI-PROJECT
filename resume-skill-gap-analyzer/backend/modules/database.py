@@ -150,7 +150,7 @@ class Database:
             ).fetchone()
             if row:
                 d = dict(row)
-                d["extracted_skills"] = json.loads(d["extracted_skills"])
+                d["extracted_skills"] = json.loads(d["extracted_skills"] or "[]")
                 return d
             return None
 
@@ -163,7 +163,7 @@ class Database:
             results = []
             for row in rows:
                 d = dict(row)
-                d["extracted_skills"] = json.loads(d["extracted_skills"])
+                d["extracted_skills"] = json.loads(d["extracted_skills"] or "[]")
                 results.append(d)
             return results
 
@@ -211,9 +211,9 @@ class Database:
             results = []
             for row in rows:
                 d = dict(row)
-                d["report_json"] = json.loads(d["report_json"])
-                d["github_skills"] = json.loads(d["github_skills"])
-                d["missing_skills"] = json.loads(d["missing_skills"])
+                d["report_json"] = json.loads(d["report_json"] or "{}")
+                d["github_skills"] = json.loads(d["github_skills"] or "[]")
+                d["missing_skills"] = json.loads(d["missing_skills"] or "[]")
                 results.append(d)
             return results
 
@@ -224,9 +224,9 @@ class Database:
             ).fetchone()
             if row:
                 d = dict(row)
-                d["report_json"] = json.loads(d["report_json"])
-                d["github_skills"] = json.loads(d["github_skills"])
-                d["missing_skills"] = json.loads(d["missing_skills"])
+                d["report_json"] = json.loads(d["report_json"] or "{}")
+                d["github_skills"] = json.loads(d["github_skills"] or "[]")
+                d["missing_skills"] = json.loads(d["missing_skills"] or "[]")
                 return d
             return None
 
@@ -350,7 +350,7 @@ class Database:
             results = []
             for row in rows:
                 d = dict(row)
-                d["extracted_skills"] = json.loads(d["extracted_skills"])
+                d["extracted_skills"] = json.loads(d["extracted_skills"] or "[]")
                 d["github_skills"] = json.loads(d["github_skills"] or "[]")
                 d["missing_skills"] = json.loads(d["missing_skills"] or "[]")
                 d["report_json"] = json.loads(d["report_json"] or "{}")
@@ -396,9 +396,9 @@ class Database:
             """, (analysis_id,)).fetchone()
             if row:
                 d = dict(row)
-                d["report_json"] = json.loads(d["report_json"])
-                d["github_skills"] = json.loads(d["github_skills"])
-                d["missing_skills"] = json.loads(d["missing_skills"])
+                d["report_json"] = json.loads(d["report_json"] or "{}")
+                d["github_skills"] = json.loads(d["github_skills"] or "[]")
+                d["missing_skills"] = json.loads(d["missing_skills"] or "[]")
                 return d
             return None
 

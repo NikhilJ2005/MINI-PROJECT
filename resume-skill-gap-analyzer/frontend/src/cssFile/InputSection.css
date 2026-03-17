@@ -18,6 +18,6 @@
     transform: scale(0.98);
 }
 .submit-btn:disabled {
-    background: var(--color-text-secondary);
+    background: var(--text-gray, #6b6b6b);
     cursor: not-allowed;
 }

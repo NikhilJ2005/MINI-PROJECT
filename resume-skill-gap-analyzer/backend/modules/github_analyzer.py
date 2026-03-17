@@ -85,44 +85,47 @@ class GitHubAnalyzer:
 
         print(f"   [GitHubAnalyzer] Fetching repos for user: {username}")
 
-        try:
-            client = await self._get_client()
-            response = await client.get(url, params=params)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                client = await self._get_client()
+                response = await client.get(url, params=params)
 
-            if response.status_code == 404:
-                print(f"   [GitHubAnalyzer] ERROR: User '{username}' not found (404).")
-                return [], f"GitHub user '{username}' not found."
+                if response.status_code == 404:
+                    print(f"   [GitHubAnalyzer] ERROR: User '{username}' not found (404).")
+                    return [], f"GitHub user '{username}' not found."
 
-            if response.status_code == 403:
-                print("   [GitHubAnalyzer] ERROR: Rate limit exceeded (403).")
-                return [], "GitHub API rate limit exceeded. Try again later or add a token."
+                if response.status_code == 403:
+                    print("   [GitHubAnalyzer] ERROR: Rate limit exceeded (403).")
+                    return [], "GitHub API rate limit exceeded. Try again later or add a token."
 
-            if response.status_code != 200:
-                print(f"   [GitHubAnalyzer] ERROR: HTTP {response.status_code}")
-                return [], f"GitHub API error: HTTP {response.status_code}"
+                if response.status_code != 200:
+                    print(f"   [GitHubAnalyzer] ERROR: HTTP {response.status_code}")
+                    return [], f"GitHub API error: HTTP {response.status_code}"
 
-            repos_data = response.json()
+                repos_data = response.json()
 
-            repos = []
-            for repo in repos_data:
-                repos.append({
-                    "name": repo.get("name", ""),
-                    "language": repo.get("language"),
-                    "description": repo.get("description", ""),
-                    "stargazers_count": repo.get("stargazers_count", 0),
-                    "fork": repo.get("fork", False),
-                    "topics": repo.get("topics", []),
-                })
+                repos = []
+                for repo in repos_data:
+                    repos.append({
+                        "name": repo.get("name", ""),
+                        "language": repo.get("language"),
+                        "description": repo.get("description", ""),
+                        "stargazers_count": repo.get("stargazers_count", 0),
+                        "fork": repo.get("fork", False),
+                        "topics": repo.get("topics", []),
+                    })
 
-            print(f"   [GitHubAnalyzer] Found {len(repos)} repositories.")
-            return repos, ""
+                print(f"   [GitHubAnalyzer] Found {len(repos)} repositories.")
+                return repos, ""
 
-        except httpx.TimeoutException:
-            print("   [GitHubAnalyzer] ERROR: Request timed out.")
-            return [], "GitHub API request timed out."
-        except httpx.ConnectError:
-            print("   [GitHubAnalyzer] ERROR: Connection failed.")
-            return [], "Failed to connect to GitHub API."
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                wait = 2 ** attempt
+                print(f"   [GitHubAnalyzer] Retry {attempt+1}/{max_retries} after {e.__class__.__name__}, waiting {wait}s...")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(wait)
+                else:
+                    return [], f"GitHub API failed after {max_retries} retries: {e}"
 
     # -----------------------------------------------------------------
     #  Fetch Repository Languages (async)
@@ -246,21 +249,23 @@ class GitHubAnalyzer:
             if match:
                 demonstrated_skills.add(match)
 
-        # Match GitHub topics to master skills
+        # Match GitHub topics to master skills (exact cleaned match only — no substring)
         for topic in all_topics:
             topic_clean = topic.lower().replace("-", " ").replace("_", " ")
             exact = skill_clean_map.get(topic_clean)
             if exact:
                 demonstrated_skills.add(exact)
-            else:
-                for cleaned, skill in skill_clean_map.items():
-                    if topic_clean in cleaned or cleaned in topic_clean:
-                        demonstrated_skills.add(skill)
+            # Also try direct lowercase match
+            direct = skill_lower_map.get(topic.lower())
+            if direct:
+                demonstrated_skills.add(direct)
 
         # Step 5: Calculate proficiency scores
         skill_proficiency: Dict[str, float] = {}
         if language_bytes:
-            max_bytes = max(language_bytes.values()) if language_bytes else 1
+            max_bytes = max(language_bytes.values(), default=1)
+            if max_bytes <= 0:
+                max_bytes = 1
             lang_lower_bytes = {lang.lower(): bc for lang, bc in language_bytes.items()}
             for skill in demonstrated_skills:
                 skill_bytes = lang_lower_bytes.get(skill.lower(), 0)

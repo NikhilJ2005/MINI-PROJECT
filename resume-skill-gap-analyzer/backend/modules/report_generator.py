@@ -236,7 +236,8 @@ class ReportGenerator:
             },
             "recommendations": recommendations,
             "learning_path": self.generate_learning_path(
-                analysis_result["missing_required"] + analysis_result["missing_nice_to_have"]
+                analysis_result["missing_required"],
+                analysis_result["missing_nice_to_have"],
             ),
             "ml_insights": ml_insights,
             "github_insights": github_insights,
@@ -251,32 +252,32 @@ class ReportGenerator:
     # -----------------------------------------------------------------
     #  Generate Learning Path
     # -----------------------------------------------------------------
-    def generate_learning_path(self, missing_skills: List[str]) -> List[Dict]:
+    def generate_learning_path(
+        self, missing_required: List[str], missing_nice_to_have: List[str] = None
+    ) -> List[Dict]:
         """
         Create a prioritized learning path for the candidate's missing skills.
 
-        Skills are ordered: critical (required) first, then recommended
-        (nice-to-have). Each skill gets a suggested learning approach.
-
         Args:
-            missing_skills: List of skill names the candidate is missing.
-                            Expected to have required skills first, then nice-to-have.
+            missing_required:     Required skills the candidate is missing.
+            missing_nice_to_have: Nice-to-have skills the candidate is missing.
 
         Returns:
-            A list of dicts, each containing:
-              - skill:          The skill name
-              - priority:       "Critical" or "Recommended"
-              - suggested_path: What to study / build
+            A list of dicts with skill, priority, and suggested_path.
         """
         learning_path = []
 
-        for i, skill in enumerate(missing_skills):
-            # First half are typically required (Critical), rest are nice-to-have
-            priority = "Critical" if i < len(missing_skills) // 2 + 1 else "Recommended"
-
+        for skill in missing_required:
             learning_path.append({
                 "skill": skill,
-                "priority": priority,
+                "priority": "Critical",
+                "suggested_path": self._get_resource_hint(skill),
+            })
+
+        for skill in (missing_nice_to_have or []):
+            learning_path.append({
+                "skill": skill,
+                "priority": "Recommended",
                 "suggested_path": self._get_resource_hint(skill),
             })
 

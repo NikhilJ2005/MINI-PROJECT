@@ -79,6 +79,13 @@ async def lifespan(app: FastAPI):
 
     with open(os.path.join(data_dir, "job_roles.json"), "r") as f:
         state.job_roles_data = json.load(f)
+    # Validate job roles structure
+    for role_name, role_data in state.job_roles_data.items():
+        if "required_skills" not in role_data:
+            logger.warning(f"Job role '{role_name}' missing 'required_skills' — adding empty list")
+            role_data["required_skills"] = []
+        if "nice_to_have" not in role_data:
+            role_data["nice_to_have"] = []
     logger.info(f"Loaded {len(state.job_roles_data)} job roles.")
 
     with open(os.path.join(data_dir, "skills_master.json"), "r") as f:
@@ -193,7 +200,9 @@ async def _run_single_analysis(
             github_result["error"] = str(e)
 
     # Feature engineering
-    role_data = state.job_roles_data[target_role]
+    role_data = state.job_roles_data.get(target_role)
+    if not role_data:
+        raise ValueError(f"Unknown target role: '{target_role}'")
     skill_matrix = state.feature_engineer.create_skill_matrix(
         claimed_skills,
         demonstrated_skills,
@@ -311,8 +320,12 @@ async def analyze(
     if target_role not in state.job_roles_data:
         raise HTTPException(400, f"Unknown role: '{target_role}'. Available: {list(state.job_roles_data.keys())}")
 
-    # Parse resume
+    # Parse resume (with size limit)
     file_bytes = await resume_file.read()
+    if len(file_bytes) > 10 * 1024 * 1024:  # 10 MB limit
+        raise HTTPException(400, "File too large. Maximum size is 10 MB.")
+    if len(file_bytes) == 0:
+        raise HTTPException(400, "Uploaded file is empty.")
     try:
         resume_result = state.resume_parser.parse(file_bytes, filename, state.skills_master)
     except Exception as e:
@@ -467,6 +480,12 @@ async def analyze_batch(
 
         try:
             file_bytes = await resume_file.read()
+            if len(file_bytes) > 10 * 1024 * 1024:
+                errors.append({"file": filename, "error": "File too large (max 10 MB)"})
+                continue
+            if len(file_bytes) == 0:
+                errors.append({"file": filename, "error": "File is empty"})
+                continue
             resume_result = state.resume_parser.parse(file_bytes, filename, state.skills_master)
             claimed_skills = resume_result["extracted_skills"]
             personal_info = resume_result.get("personal_info", {})

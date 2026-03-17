@@ -265,37 +265,87 @@ class ResumeParser:
             if not info["linkedin_url"].startswith("http"):
                 info["linkedin_url"] = "https://" + info["linkedin_url"]
 
-        # Name — use spaCy NER to find PERSON entities (first one is usually the candidate)
+        # --- Name Extraction ---
+        # Strategy: try first-line heuristic first (most reliable for standard resumes),
+        # then validate/supplement with spaCy NER.
+
+        # Blacklist: words that spaCy commonly misidentifies as PERSON
+        _name_blacklist = {
+            "algorithm", "algorithms", "summary", "objective", "education",
+            "experience", "skills", "projects", "references", "professional",
+            "technical", "curriculum", "vitae", "resume", "data", "engineering",
+            "computer", "science", "information", "technology", "university",
+            "institute", "college", "bachelor", "master", "work", "career",
+            "contact", "personal", "about", "overview", "profile", "introduction",
+        }
+
+        # First: try the first-line heuristic (most resumes put the name on line 1)
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        first_line_candidate = ""
+        if lines:
+            first_line = lines[0]
+            # First line is often the name if it's short, has no special chars,
+            # and doesn't look like a section header or technical term
+            fl_lower = first_line.lower()
+            if (
+                len(first_line) < 50
+                and not self.EMAIL_PATTERN.search(first_line)
+                and not self.PHONE_PATTERN.search(first_line)
+                and not any(kw in fl_lower for kw in _name_blacklist)
+                # Name should have at least 2 words (first + last)
+                and len(first_line.split()) >= 2
+                # All words should be alphabetic (names don't contain special chars)
+                and all(word.isalpha() for word in first_line.replace("-", "").replace(".", "").split())
+            ):
+                first_line_candidate = first_line
+
+        # Second: use spaCy NER to find PERSON entities as validation/fallback
+        spacy_name_candidate = ""
         if self.nlp is not None:
-            # Use pre-computed doc if available, otherwise process first ~500 chars
             if spacy_doc is not None:
                 doc = spacy_doc
             else:
                 doc = self.nlp(text[:500])
             for ent in doc.ents:
-                # Only look for names in first 500 chars of the document
                 if ent.start_char > 500:
                     break
                 if ent.label_ == "PERSON":
-                    name = ent.text.strip()
-                    # Filter out single-char or obviously wrong names
-                    if len(name) > 2 and not any(c.isdigit() for c in name):
-                        info["name"] = name
+                    # Clean up: spaCy may span multiple lines — take only the name-like parts
+                    raw_name = ent.text.strip()
+                    # If it spans newlines, take the part that looks like a name
+                    name_parts = [p.strip() for p in raw_name.split("\n") if p.strip()]
+                    name = ""
+                    for part in name_parts:
+                        part_lower = part.lower()
+                        if (
+                            len(part) > 2
+                            and not any(c.isdigit() for c in part)
+                            and not any(word in _name_blacklist for word in part_lower.split())
+                            and part.replace("-", "").replace(".", "").replace(" ", "").isalpha()
+                        ):
+                            name = part
+                            break
+                    if name and len(name.split()) >= 2:
+                        spacy_name_candidate = name
                         break
 
-        # If spaCy didn't find a name, use the first line heuristic
-        if not info["name"]:
-            lines = [l.strip() for l in text.split("\n") if l.strip()]
-            if lines:
-                first_line = lines[0]
-                # First line is often the name if it's short and has no special chars
-                if (
-                    len(first_line) < 50
-                    and not self.EMAIL_PATTERN.search(first_line)
-                    and not self.PHONE_PATTERN.search(first_line)
-                    and not any(kw.lower() in first_line.lower() for kw in ["resume", "curriculum", "objective"])
-                ):
-                    info["name"] = first_line
+        # Decide: prefer first-line if valid, else spaCy, else single-word first-line
+        if first_line_candidate:
+            info["name"] = first_line_candidate
+        elif spacy_name_candidate:
+            info["name"] = spacy_name_candidate
+        elif lines:
+            # Last resort: first line if it's short and looks like a name (even single word)
+            first_line = lines[0]
+            fl_lower = first_line.lower()
+            if (
+                len(first_line) < 40
+                and first_line.replace("-", "").replace(".", "").replace(" ", "").isalpha()
+                and not self.EMAIL_PATTERN.search(first_line)
+                and fl_lower not in _name_blacklist
+                and not any(kw in fl_lower for kw in _name_blacklist)
+            ):
+                info["name"] = first_line
 
         # Education — find lines containing education keywords
         education_lines = []
@@ -356,13 +406,9 @@ class ResumeParser:
             }
 
         # Handle empty extraction (corrupted file, etc.)
-        if not raw_text:
+        if not raw_text or not raw_text.strip():
             print("   [ResumeParser] WARNING: No text extracted from file.")
-            return {
-                "raw_text": "",
-                "extracted_skills": [],
-                "skill_count": 0,
-            }
+            raise ValueError(f"Could not extract text from '{filename}'. The file may be empty, corrupted, or image-based.")
 
         # Run spaCy NLP once and share the doc across both extraction methods
         spacy_doc = self.nlp(raw_text) if self.nlp else None

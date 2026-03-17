@@ -1,13 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 import "./cssFile/Toast.css";
 
 let toastCounter = 0;
-let globalAddToast = null;
 
-// Call this from anywhere to show a toast notification
+// Context-based toast system
+const ToastContext = createContext(null);
+
+export function useToast() {
+  return useContext(ToastContext);
+}
+
+// Imperative API for non-component code — uses a ref to the latest addToast
+const addToastRef = { current: null };
+
 export function showToast(message, type = "success", duration = 3000) {
-  if (globalAddToast) {
-    globalAddToast({ id: ++toastCounter, message, type, duration });
+  if (addToastRef.current) {
+    addToastRef.current({ id: ++toastCounter, message, type, duration });
   }
 }
 
@@ -39,16 +47,19 @@ export default function ToastContainer() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // Keep the ref in sync with the latest addToast callback
   useEffect(() => {
-    globalAddToast = addToast;
-    return () => { globalAddToast = null; };
+    addToastRef.current = addToast;
+    return () => { addToastRef.current = null; };
   }, [addToast]);
 
   return (
-    <div className="toast-container">
-      {toasts.map((t) => (
-        <Toast key={t.id} toast={t} onRemove={removeToast} />
-      ))}
-    </div>
+    <ToastContext.Provider value={addToast}>
+      <div className="toast-container">
+        {toasts.map((t) => (
+          <Toast key={t.id} toast={t} onRemove={removeToast} />
+        ))}
+      </div>
+    </ToastContext.Provider>
   );
 }

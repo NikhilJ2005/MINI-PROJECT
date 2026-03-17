@@ -29,18 +29,21 @@ function InputSection({onError,onAnalyze,obtainedReport}) {
         e.preventDefault();
         setError("");
         if (!resumeFile) {
-            setError("Please upload a resume file (.pdf or .txt).");
-            onError(error);
+            const msg = "Please upload a resume file (.pdf or .txt).";
+            setError(msg);
+            onError(msg);
             return;
         }
         if (!gitHubUserName) {
-            setError("Please enter a GitHub Username.");
-            onError(error);
+            const msg = "Please enter a GitHub Username.";
+            setError(msg);
+            onError(msg);
             return;
         }
         if (!targetRole) {
-            setError("Please select a target role.");
-            onError(error);
+            const msg = "Please select a target role.";
+            setError(msg);
+            onError(msg);
             return;
         }
         const formData = new FormData();
