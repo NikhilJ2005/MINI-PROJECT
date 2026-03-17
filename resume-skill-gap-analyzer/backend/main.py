@@ -812,6 +812,7 @@ async def get_dataset_status():
     return {
         "training_data_source": state.ml_model.dataset_source,
         "model_trained": state.ml_model.is_trained,
+        "dataset_details": state.dataset_loader.get_status(),
     }
 
 
