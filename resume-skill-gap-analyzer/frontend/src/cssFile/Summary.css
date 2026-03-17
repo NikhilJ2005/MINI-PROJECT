@@ -6,7 +6,7 @@
 }
 
 .summary-card {
-    background: white;
+    background: var(--card-bg, white);
     border-radius:8px;
     box-shadow: var(--shadow);
     padding: 20px;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import "./cssFile/DashboardStats.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -28,9 +29,28 @@ function DashboardStats() {
     fetchData();
   }, []);
 
-  if (loading) return <div className="loading-msg">Loading dashboard...</div>;
+  if (loading) {
+    return (
+      <div className="dashboard">
+        <h2>Platform Dashboard</h2>
+        <div className="stats-grid">
+          {[...Array(4)].map((_, i) => (
+            <div className="stat-card skeleton-card" key={i}>
+              <div className="skeleton-number" />
+              <div className="skeleton-label" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (error) return <div className="error-msg">{error}</div>;
   if (!stats) return null;
+
+  const roleChartData = (stats.top_roles || []).map((r) => ({
+    role: r.role.length > 15 ? r.role.slice(0, 15) + "…" : r.role,
+    count: r.count,
+  }));
 
   return (
     <div className="dashboard">
@@ -54,17 +74,28 @@ function DashboardStats() {
         </div>
       </div>
 
-      {stats.top_roles && stats.top_roles.length > 0 && (
+      {roleChartData.length > 0 && (
         <div className="dashboard-section">
-          <h3>Top Analyzed Roles</h3>
-          <div className="role-list">
-            {stats.top_roles.map((r, i) => (
-              <div className="role-item" key={i}>
-                <span className="role-name">{r.role}</span>
-                <span className="role-count">{r.count} analyses</span>
-              </div>
-            ))}
+          <h3>Analyses by Role</h3>
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={roleChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-light, #e2e8f0)" />
+                <XAxis dataKey="role" tick={{ fill: "var(--text-gray, #64748b)", fontSize: 12 }} />
+                <YAxis allowDecimals={false} tick={{ fill: "var(--text-gray, #64748b)", fontSize: 12 }} />
+                <Tooltip contentStyle={{ background: "var(--card-bg, #fff)", border: "1px solid var(--border-light, #e2e8f0)", borderRadius: 8 }} />
+                <Bar dataKey="count" fill="var(--primary, #2563eb)" radius={[6, 6, 0, 0]} name="Analyses" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
+        </div>
+      )}
+
+      {stats.total_candidates === 0 && stats.total_analyses === 0 && (
+        <div className="empty-state">
+          <div className="empty-icon">📊</div>
+          <h3>No data yet</h3>
+          <p>Analyze some resumes to see platform statistics here.</p>
         </div>
       )}
 

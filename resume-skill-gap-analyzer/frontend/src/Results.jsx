@@ -1,17 +1,88 @@
-import { memo } from "react";
+import { memo, useRef, useCallback } from "react";
 import ScoreCard from "./ScoreCard";
 import Summary from "./Summary";
 import SkillTable from "./SkillTable";
+import SkillRadarChart from "./SkillRadarChart";
+import { showToast } from "./Toast";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import Papa from "papaparse";
 import "./cssFile/Results.css";
 
 const Results = memo(function Results({ report }) {
     const ml_insights = report.ml_insights;
     const git_insights = report.github_insights;
-    const maxLang=git_insights.top_languages[0].bytes
+    const maxLang = git_insights?.top_languages?.[0]?.bytes || 1;
+    const resultsRef = useRef(null);
+
+    // --- PDF Export ---
+    const handleExportPDF = useCallback(async () => {
+        if (!resultsRef.current) return;
+        try {
+            showToast("Generating PDF...", "info");
+            const canvas = await html2canvas(resultsRef.current, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: "#ffffff",
+            });
+            const imgData = canvas.toDataURL("image/png");
+            const pdf = new jsPDF("p", "mm", "a4");
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+            const name = report.candidate_info?.name || "Candidate";
+            const role = report.target_role || "Role";
+            pdf.save(`SkillGap_${name}_${role}.pdf`);
+            showToast("PDF downloaded!", "success");
+        } catch {
+            showToast("PDF generation failed", "error");
+        }
+    }, [report]);
+
+    // --- CSV Export ---
+    const handleExportCSV = useCallback(() => {
+        const allSkills = [
+            ...(report.skill_breakdown?.required_analysis || []),
+            ...(report.skill_breakdown?.nice_to_have_analysis || []),
+        ];
+        const csvData = allSkills.map((s) => ({
+            Skill: s.skill,
+            Status: s.status,
+            "In Resume": s.in_resume ? "Yes" : "No",
+            "On GitHub": s.in_github ? "Yes" : "No",
+            "ML Confidence": s.probability != null ? `${Math.round(s.probability * 100)}%` : "N/A",
+            Category: s.category || "required",
+        }));
+        const csv = Papa.unparse(csvData);
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        const name = report.candidate_info?.name || "Candidate";
+        link.download = `SkillGap_${name}_skills.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        showToast("CSV exported!", "success");
+    }, [report]);
+
     return (
-        <section className="results-section">
+        <section className="results-section" ref={resultsRef}>
+            {/* Export buttons */}
+            <div className="export-bar">
+                <button className="export-btn export-pdf" onClick={handleExportPDF}>
+                    Export PDF
+                </button>
+                <button className="export-btn export-csv" onClick={handleExportCSV}>
+                    Export CSV
+                </button>
+            </div>
+
             <ScoreCard report={report} />
             <Summary summary={report.executive_summary} />
+
+            {/* Skill Radar Chart */}
+            <SkillRadarChart report={report} />
+
             <div className="skill-breakdown">
                 <h2>Skill Breakdown</h2>
                 <SkillTable title="Required Skills" analysis={report.skill_breakdown.required_analysis} />
@@ -63,16 +134,20 @@ const Results = memo(function Results({ report }) {
                         <span className="github-stat-label">Repositories Analyzed</span>
                         <span className="github-stat-value">{git_insights.repos_analyzed}</span>
                     </div>
-                    <h4>Top Languages</h4>
-                    {git_insights.top_languages.map((item, index) => (
-                        <div className="language-bar" key={index}>
-                            <span className="language-bar-name">{item.language}</span>
-                            <div className="language-bar-track">
-                                <div className="language-bar-fill" style={{ width: `${(item.bytes / maxLang) * 100}%` }}></div>
-                            </div>
-                            <span className="language-bar-bytes">{(item.bytes/1000).toFixed(1)} KB</span>
-                        </div>
-                    ))}
+                    {git_insights?.top_languages?.length > 0 && (
+                        <>
+                            <h4>Top Languages</h4>
+                            {git_insights.top_languages.map((item, index) => (
+                                <div className="language-bar" key={index}>
+                                    <span className="language-bar-name">{item.language}</span>
+                                    <div className="language-bar-track">
+                                        <div className="language-bar-fill" style={{ width: `${(item.bytes / maxLang) * 100}%` }}></div>
+                                    </div>
+                                    <span className="language-bar-bytes">{(item.bytes / 1000).toFixed(1)} KB</span>
+                                </div>
+                            ))}
+                        </>
+                    )}
                 </div>
             </div>
         </section>

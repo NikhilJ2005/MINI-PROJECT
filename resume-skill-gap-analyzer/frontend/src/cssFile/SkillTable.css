@@ -21,7 +21,7 @@
 
 .skill-table th {
     padding: 12px 14px;
-    background: white;
+    background: var(--card-bg, white);
     color: var(--text-gray);
     border-bottom: 2px solid var(--color-border);
     font-size: 0.8rem;
@@ -45,37 +45,74 @@
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* --- Status Badges --- */
+/* --- Status Pill Badges --- */
 
-.badge-strong {
-    background: var(--color-strong-bg);
-    color: var(--color-strong);
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: default;
 }
 
-.badge-claimed_only {
-    background: var(--color-claimed-bg);
-    color: var(--color-claimed);
+.status-icon {
+    font-size: 0.85rem;
 }
 
-.badge-demonstrated_only {
-    background: var(--color-demonstrated-bg);
-    color: var(--color-demonstrated);
+.status-strong {
+    background: var(--color-strong-bg, #dcfce7);
+    color: var(--color-strong, #16a34a);
 }
 
-.badge-missing {
-    background: var(--color-missing-bg);
-    color: var(--color-missing);
+.status-claimed_only {
+    background: var(--color-claimed-bg, #dbeafe);
+    color: var(--color-claimed, #2563eb);
 }
 
-/* Check / X marks */
-.check-mark {
-    color: var(--color-strong);
+.status-demonstrated_only {
+    background: var(--color-demonstrated-bg, #f3e8ff);
+    color: var(--color-demonstrated, #7c3aed);
+}
+
+.status-missing {
+    background: var(--color-missing-bg, #fee2e2);
+    color: var(--color-missing, #dc2626);
+}
+
+/* Also keep old badge classes for backwards compat */
+.badge-strong { background: var(--color-strong-bg); color: var(--color-strong); }
+.badge-claimed_only { background: var(--color-claimed-bg); color: var(--color-claimed); }
+.badge-demonstrated_only { background: var(--color-demonstrated-bg); color: var(--color-demonstrated); }
+.badge-missing { background: var(--color-missing-bg); color: var(--color-missing); }
+
+/* Check / X indicators */
+.check-cell {
+    text-align: center;
+}
+
+.indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 0.75rem;
     font-weight: 700;
 }
 
-.x-mark {
-    color: var(--color-missing);
-    font-weight: 700;
+.indicator-yes {
+    background: var(--color-strong-bg, #dcfce7);
+    color: var(--color-strong, #16a34a);
+}
+
+.indicator-no {
+    background: var(--color-missing-bg, #fee2e2);
+    color: var(--color-missing, #dc2626);
 }
 
 /* Confidence bar */

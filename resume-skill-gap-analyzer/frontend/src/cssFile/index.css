@@ -36,6 +36,25 @@
   --color-missing-bg: #fee2e2;
 }
 
+/* Dark Mode Theme */
+[data-theme="dark"] {
+  --primary: #3b82f6;
+  --primary-dark: #2563eb;
+  --secondary: #22d3ee;
+  --background: #0f172a;
+  --text-dark: #e2e8f0;
+  --text-gray: #94a3b8;
+  --text-light: #ffffff;
+  --border-light: #334155;
+  --color-shadow: rgba(0, 0, 0, 0.3);
+  --color-border: #334155;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
+  --card-bg: #1e293b;
+  --input-bg: #1e293b;
+  --loading-overlay-bg: rgba(15, 23, 42, 0.8);
+}
+
 html,
 body {
   height: 100%;

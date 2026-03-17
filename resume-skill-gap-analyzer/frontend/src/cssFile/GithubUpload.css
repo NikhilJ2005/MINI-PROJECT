@@ -17,7 +17,7 @@
     border-radius:8px;
     overflow: hidden;
     transition: border-color 0.2s, box-shadow 0.2s;
-    background: white;
+    background: var(--card-bg, white);
 }
 
 .input-with-prefix:focus-within {
@@ -42,4 +42,5 @@
     outline: none;
     font-family: inherit;
     background: transparent;
+    color: var(--text-dark);
 }

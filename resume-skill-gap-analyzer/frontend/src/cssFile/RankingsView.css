@@ -2,6 +2,13 @@
   text-align: left;
 }
 
+.rankings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
 .rankings-view h2 {
   margin-top: 0;
 }
@@ -14,4 +21,42 @@
 .role-selector {
   max-width: 400px;
   margin-bottom: 20px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.empty-state p {
+  color: var(--text-gray);
+  margin: 0;
+}
+
+.export-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--primary);
+  color: #fff;
+}
+
+.export-btn:hover {
+  opacity: 0.9;
 }
