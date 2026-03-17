@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import Papa from "papaparse";
+import { showToast } from "./Toast";
 import "./cssFile/CandidatesList.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -10,6 +12,9 @@ function CandidatesList() {
   const [error, setError] = useState("");
   const [selected, setSelected] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortKey, setSortKey] = useState("id");
+  const [sortDir, setSortDir] = useState("asc");
 
   const fetchCandidates = async () => {
     try {
@@ -51,12 +56,87 @@ function CandidatesList() {
     }
   };
 
-  if (loading) return <div className="loading-msg">Loading candidates...</div>;
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const filtered = useMemo(() => {
+    let list = candidates;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (c) =>
+          (c.name || "").toLowerCase().includes(q) ||
+          (c.email || "").toLowerCase().includes(q) ||
+          (c.github_username || "").toLowerCase().includes(q)
+      );
+    }
+    list = [...list].sort((a, b) => {
+      const aVal = a[sortKey] ?? "";
+      const bVal = b[sortKey] ?? "";
+      if (typeof aVal === "number" && typeof bVal === "number") return sortDir === "asc" ? aVal - bVal : bVal - aVal;
+      return sortDir === "asc" ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+    });
+    return list;
+  }, [candidates, searchQuery, sortKey, sortDir]);
+
+  const handleExportCSV = () => {
+    const csvData = candidates.map((c) => ({
+      ID: c.id,
+      Name: c.name || "",
+      Email: c.email || "",
+      GitHub: c.github_username || "",
+    }));
+    const csv = Papa.unparse(csvData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "candidates.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("CSV exported!", "success");
+  };
+
+  const sortIcon = (key) => (sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "");
+
+  if (loading) {
+    return (
+      <div className="candidates-page">
+        <h2>Candidates</h2>
+        <div className="skeleton-table">
+          {[...Array(5)].map((_, i) => (
+            <div className="skeleton-row" key={i}><div className="skeleton-cell" /><div className="skeleton-cell wide" /><div className="skeleton-cell wide" /><div className="skeleton-cell" /></div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (error) return <div className="error-msg">{error}</div>;
 
   return (
     <div className="candidates-page">
-      <h2>Candidates ({total})</h2>
+      <div className="candidates-header">
+        <h2>Candidates ({total})</h2>
+        {candidates.length > 0 && (
+          <button className="export-btn export-csv" onClick={handleExportCSV}>Export CSV</button>
+        )}
+      </div>
+
+      {!detail && candidates.length > 0 && (
+        <input
+          type="text"
+          className="search-bar"
+          placeholder="Search by name, email, or GitHub..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      )}
 
       {detail && (
         <div className="candidate-detail-panel">
@@ -106,20 +186,24 @@ function CandidatesList() {
       {!detail && (
         <div className="candidates-list">
           {candidates.length === 0 ? (
-            <p className="no-data">No candidates yet. Analyze some resumes first!</p>
+            <div className="empty-state">
+              <div className="empty-icon">📋</div>
+              <h3>No candidates yet</h3>
+              <p>Upload and analyze a resume to see candidates here.</p>
+            </div>
           ) : (
             <table className="candidates-table">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>Email</th>
+                  <th className="sortable" onClick={() => handleSort("id")}>ID{sortIcon("id")}</th>
+                  <th className="sortable" onClick={() => handleSort("name")}>Name{sortIcon("name")}</th>
+                  <th className="sortable" onClick={() => handleSort("email")}>Email{sortIcon("email")}</th>
                   <th>GitHub</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {candidates.map((c) => (
+                {filtered.map((c) => (
                   <tr key={c.id}>
                     <td>{c.id}</td>
                     <td>{c.name || "—"}</td>

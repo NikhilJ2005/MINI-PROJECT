@@ -1,6 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Role from "./Role";
 import RankingTable from "./RankingTable";
+import Papa from "papaparse";
+import { showToast } from "./Toast";
 import "./cssFile/RankingsView.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -32,10 +34,39 @@ function RankingsView() {
     if (role) fetchRankings(role);
   };
 
+  const handleExportCSV = () => {
+    if (!rankings) return;
+    const csvData = rankings.map((r, i) => ({
+      Rank: i + 1,
+      Name: r.name || "Unknown",
+      "Match Score": `${Math.round(r.match_score)}%`,
+      Confidence: `${Math.round(r.confidence)}%`,
+      "Resume Skills": r.resume_skills_count || 0,
+      "GitHub Skills": r.github_skills_count || 0,
+      Missing: r.missing_count || 0,
+    }));
+    const csv = Papa.unparse(csvData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `rankings_${targetRole}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("Rankings CSV exported!", "success");
+  };
+
   return (
     <div className="rankings-view">
-      <h2>Candidate Rankings</h2>
-      <p className="rankings-desc">Select a role to see ranked candidates from all previous analyses.</p>
+      <div className="rankings-header">
+        <div>
+          <h2>Candidate Rankings</h2>
+          <p className="rankings-desc">Select a role to see ranked candidates from all previous analyses.</p>
+        </div>
+        {rankings && rankings.length > 0 && (
+          <button className="export-btn export-csv" onClick={handleExportCSV}>Export CSV</button>
+        )}
+      </div>
 
       <div className="role-selector">
         <Role onTargetSet={handleRoleChange} />
@@ -43,6 +74,14 @@ function RankingsView() {
 
       {loading && <div className="loading-msg">Loading rankings...</div>}
       {error && <div className="error-msg">{error}</div>}
+
+      {!loading && !rankings && !error && (
+        <div className="empty-state">
+          <div className="empty-icon">🏆</div>
+          <h3>Select a role</h3>
+          <p>Choose a target role above to see candidate rankings.</p>
+        </div>
+      )}
 
       {rankings && (
         <RankingTable

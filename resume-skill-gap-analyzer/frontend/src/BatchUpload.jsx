@@ -1,6 +1,8 @@
 import { useState } from "react";
 import Role from "./Role";
 import RankingTable from "./RankingTable";
+import Papa from "papaparse";
+import { showToast } from "./Toast";
 import "./cssFile/BatchUpload.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -97,6 +99,23 @@ function BatchUpload() {
             <span className="batch-stat">Analyzed: <strong>{result.total_analyzed}</strong></span>
             <span className="batch-stat">Errors: <strong>{result.total_errors}</strong></span>
             <span className="batch-stat">Role: <strong>{result.target_role}</strong></span>
+            <button className="export-btn export-csv" onClick={() => {
+              const csvData = result.rankings.map((r, i) => ({
+                Rank: r.rank || i + 1,
+                Name: r.name || r.filename || "Unknown",
+                "Match Score": `${Math.round(r.match_score)}%`,
+                Confidence: `${Math.round(r.confidence)}%`,
+              }));
+              const csv = Papa.unparse(csvData);
+              const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `batch_${result.target_role}.csv`;
+              link.click();
+              URL.revokeObjectURL(url);
+              showToast("Batch CSV exported!", "success");
+            }}>Export CSV</button>
           </div>
           <RankingTable rankings={result.rankings} />
           {result.errors.length > 0 && (

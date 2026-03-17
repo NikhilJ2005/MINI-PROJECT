@@ -66,6 +66,67 @@
   font-size: 0.85rem;
 }
 
+/* Chart */
+.chart-container {
+  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  padding: 20px 12px;
+  box-shadow: var(--shadow);
+}
+
+/* Skeleton loading */
+.skeleton-card {
+  position: relative;
+}
+
+.skeleton-number {
+  width: 60px;
+  height: 28px;
+  margin: 0 auto 8px;
+  background: var(--border-light, #e2e8f0);
+  border-radius: 4px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-label {
+  width: 100px;
+  height: 14px;
+  margin: 0 auto;
+  background: var(--border-light, #e2e8f0);
+  border-radius: 4px;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  margin-top: 24px;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.empty-state p {
+  color: var(--text-gray);
+  margin: 0;
+}
+
 .loading-msg {
   text-align: center;
   padding: 40px;
