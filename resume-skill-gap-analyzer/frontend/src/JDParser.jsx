@@ -61,6 +61,7 @@ function JDParser() {
             placeholder="Paste the full job description here..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            maxLength={50000}
           />
         </div>
 

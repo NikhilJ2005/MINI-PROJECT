@@ -162,16 +162,15 @@ class SkillGapAnalyzer:
         # Gap score: inverse of match score
         gap_score = round(100 - match_score, 1)
 
-        # Confidence score: average ML probability for skills that ARE present
-        # This tells us how confident the ML model is in the candidate's skills
-        present_probs = [
+        # Confidence score: average ML probability across ALL required skills
+        # This gives an unbiased view of how confident the ML model is overall
+        all_probs = [
             lr_probabilities[i]
             for i in range(min(len(required_skills), len(lr_probabilities)))
-            if required_skills[i] in all_combined
         ]
 
-        if present_probs:
-            confidence = round(sum(present_probs) / len(present_probs) * 100, 1)
+        if all_probs:
+            confidence = round(sum(all_probs) / len(all_probs) * 100, 1)
         else:
             confidence = 0.0
 

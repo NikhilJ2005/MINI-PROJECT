@@ -125,7 +125,7 @@
 .confidence-bar {
     flex: 1;
     height: 8px;
-    background: var(--color-bg);
+    background: var(--border-light, #e2e8f0);
     border-radius: 4px;
     overflow: hidden;
     max-width: 100px;

@@ -65,11 +65,11 @@ function DashboardStats() {
           <div className="stat-label">Total Analyses</div>
         </div>
         <div className="stat-card">
-          <div className="stat-number">{stats.avg_match_score != null ? `${Math.round(stats.avg_match_score)}%` : "N/A"}</div>
+          <div className="stat-number">{stats.average_match_score != null ? `${Math.round(stats.average_match_score)}%` : "N/A"}</div>
           <div className="stat-label">Avg Match Score</div>
         </div>
         <div className="stat-card">
-          <div className="stat-number">{stats.total_batch_jobs || 0}</div>
+          <div className="stat-number">{stats.total_batches || 0}</div>
           <div className="stat-label">Batch Jobs</div>
         </div>
       </div>

@@ -210,13 +210,14 @@ class SkillGapMLModel:
         If ensemble probability > PREDICTION_THRESHOLD → "has skill"
         """
         if not self.is_trained:
-            logger.warning("[MLModel] Models not trained yet!")
+            logger.warning("[MLModel] Models not trained yet — returning default predictions")
+            n = len(X)
             return {
-                "lr_predictions": [],
-                "dt_predictions": [],
-                "lr_probabilities": [],
-                "ensemble_predictions": [],
-                "ensemble_probabilities": [],
+                "lr_predictions": [0] * n,
+                "dt_predictions": [0] * n,
+                "lr_probabilities": [0.5] * n,
+                "ensemble_predictions": [0] * n,
+                "ensemble_probabilities": [0.5] * n,
             }
 
         # Ensure correct feature order

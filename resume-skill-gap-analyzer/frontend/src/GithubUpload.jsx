@@ -6,14 +6,16 @@ const GithubUpload = ({onUserNameEnter}) => {
 
   const handleChange=(e)=>{
     const value=e.target.value;
-    setUsername(value);
-    onUserNameEnter(value);
+    // GitHub usernames: alphanumeric/hyphens, no leading/trailing hyphen, max 39 chars
+    const sanitized = value.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 39);
+    setUsername(sanitized);
+    onUserNameEnter(sanitized);
   };
 
   return (
     <div className="form-group">
       <label htmlFor="github-username" className="form-label">
-        GitHub Username
+        GitHub Username <span style={{fontWeight: "normal", opacity: 0.7}}>(optional — can be auto-detected from resume)</span>
       </label>
 
       <div className="input-with-prefix">
@@ -27,7 +29,6 @@ const GithubUpload = ({onUserNameEnter}) => {
           value={username}
           onChange={handleChange}
           autoComplete="off"
-          required
         />
       </div>
     </div>

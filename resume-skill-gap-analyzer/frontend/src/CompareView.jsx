@@ -21,7 +21,8 @@ function CompareView() {
           setCandidates(data.candidates);
         }
       } catch (err) {
-        console.error(err);
+        console.error("Failed to load candidates:", err);
+        setError("Failed to load candidates list.");
       }
     };
     fetchCandidates();
