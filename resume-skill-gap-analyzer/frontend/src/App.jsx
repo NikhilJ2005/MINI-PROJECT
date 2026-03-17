@@ -4,6 +4,7 @@ import TabNav from "./TabNav";
 import InputSection from "./InputSection";
 import Results from "./Results";
 import AnalysisHistory from "./AnalysisHistory";
+import ToastContainer from "./Toast";
 
 // Lazy-load tab components that aren't shown by default
 const BatchUpload = lazy(() => import("./BatchUpload"));
@@ -191,6 +192,8 @@ function App() {
           </p>
         </div>
       </footer>
+
+      <ToastContainer />
     </>
   );
 }

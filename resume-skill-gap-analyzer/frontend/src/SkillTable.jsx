@@ -1,8 +1,9 @@
 import "./cssFile/SkillTable.css";
-import ConfidenceBar from "./ConfidenceBar"
-function SkillTable({ title,analysis }) {
+import ConfidenceBar from "./ConfidenceBar";
+
+function SkillTable({ title, analysis }) {
     if (!analysis) return null;
-    const showConfidence=analysis.some(item=>item.probability!==undefined);
+    const showConfidence = analysis.some((item) => item.probability !== undefined);
 
     return (
         <div className="card">
@@ -15,7 +16,7 @@ function SkillTable({ title,analysis }) {
                             <th>Status</th>
                             <th>In Resume</th>
                             <th>On GitHub</th>
-                            {showConfidence &&<th>ML Confidence</th>}
+                            {showConfidence && <th>ML Confidence</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -23,28 +24,36 @@ function SkillTable({ title,analysis }) {
                             <tr key={index}>
                                 <td>{item.skill}</td>
                                 <td>
-                                    <span className={`badge badge-${item.status}`}>
+                                    <span
+                                        className={`status-pill status-${item.status}`}
+                                        title={getStatusTooltip(item.status)}
+                                    >
+                                        <span className="status-icon">{getStatusIcon(item.status)}</span>
                                         {formatStatus(item.status)}
                                     </span>
                                 </td>
-                                <td>
+                                <td className="check-cell">
                                     {item.in_resume ? (
-                                        <span className="check-mark">✔</span>
+                                        <span className="indicator indicator-yes">&#10003;</span>
                                     ) : (
-                                        <span className="x-mark">✘</span>
+                                        <span className="indicator indicator-no">&#10007;</span>
                                     )}
                                 </td>
-                                <td>
-                                    {item.in_github? (
-                                        <span className="check-mark">✔</span>
+                                <td className="check-cell">
+                                    {item.in_github ? (
+                                        <span className="indicator indicator-yes">&#10003;</span>
                                     ) : (
-                                        <span className="x-mark">✘</span>
+                                        <span className="indicator indicator-no">&#10007;</span>
                                     )}
                                 </td>
-                                {showConfidence &&(<td>
-                                    {item.probability != null ? (
-                                        <ConfidenceBar probability={item.probability} />) : ("-")}
-                                </td>
+                                {showConfidence && (
+                                    <td>
+                                        {item.probability != null ? (
+                                            <ConfidenceBar probability={item.probability} />
+                                        ) : (
+                                            "-"
+                                        )}
+                                    </td>
                                 )}
                             </tr>
                         ))}
@@ -55,18 +64,34 @@ function SkillTable({ title,analysis }) {
     );
 }
 
-function formatStatus(status) {
+function getStatusIcon(status) {
     switch (status) {
-        case "strong":
-            return "Strong";
-        case "claimed_only":
-            return "Claimed Only";
-        case "missing":
-            return "Missing";
-        case "demonstrated_only":
-            return "Demonstrated Only";
-        default:
-            return status;
+        case "strong": return "✓";
+        case "claimed_only": return "◐";
+        case "demonstrated_only": return "◑";
+        case "missing": return "✕";
+        default: return "?";
     }
 }
+
+function getStatusTooltip(status) {
+    switch (status) {
+        case "strong": return "Found in both resume and GitHub — strong evidence";
+        case "claimed_only": return "Listed on resume but not found on GitHub";
+        case "demonstrated_only": return "Found on GitHub but not listed on resume";
+        case "missing": return "Not found in resume or GitHub — skill gap";
+        default: return "";
+    }
+}
+
+function formatStatus(status) {
+    switch (status) {
+        case "strong": return "Strong";
+        case "claimed_only": return "Claimed";
+        case "missing": return "Missing";
+        case "demonstrated_only": return "Demo Only";
+        default: return status;
+    }
+}
+
 export default SkillTable;

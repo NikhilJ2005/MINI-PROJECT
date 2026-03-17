@@ -1,0 +1,19 @@
+.skill-radar-chart {
+  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+  box-shadow: 0 2px 8px var(--color-shadow, rgba(0, 0, 0, 0.06));
+  border: 1px solid var(--color-border, #e2e8f0);
+}
+
+.skill-radar-chart h3 {
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+  color: var(--text-dark, #1e293b);
+}
+
+.recharts-legend-item-text {
+  color: var(--text-dark, #1e293b) !important;
+  font-size: 0.85rem;
+}
