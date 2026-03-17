@@ -11,6 +11,7 @@ pydantic
 scikit-learn
 pandas
 numpy
+datasets
 
 # --- NLP ---
 spacy

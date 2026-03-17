@@ -118,8 +118,9 @@ class ResumeParser:
                 page_text = page.get_text()
                 text += page_text + "\n"
 
+            page_count = len(doc)
             doc.close()
-            print(f"   [ResumeParser] Extracted text from PDF ({len(doc)} pages).")
+            print(f"   [ResumeParser] Extracted text from PDF ({page_count} pages).")
 
         except Exception as e:
             print(f"   [ResumeParser] ERROR extracting PDF text: {e}")

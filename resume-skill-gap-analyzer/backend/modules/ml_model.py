@@ -216,6 +216,7 @@ class SkillGapMLModel:
                 "lr_predictions": [0] * n,
                 "dt_predictions": [0] * n,
                 "lr_probabilities": [0.5] * n,
+                "dt_probabilities": [0.5] * n,
                 "ensemble_predictions": [0] * n,
                 "ensemble_probabilities": [0.5] * n,
             }
