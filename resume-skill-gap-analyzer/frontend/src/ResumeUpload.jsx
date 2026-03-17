@@ -15,11 +15,13 @@ function ResumeUpload({onFileSelect}) {
   const fileInputRef = useRef(null);
 
   const validTypes = ["application/pdf", "text/plain"];
+  const validExtensions = [".pdf", ".txt"];
 
   const handleFile = (file) => {
     if (!file) return;
+    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
 
-    if (validTypes.includes(file.type)) {
+    if (validTypes.includes(file.type) && validExtensions.includes(ext)) {
       setFileName(file.name);
       setFileSize(file.size);
       setError("");

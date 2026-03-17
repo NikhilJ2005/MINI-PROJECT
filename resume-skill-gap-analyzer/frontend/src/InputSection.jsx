@@ -34,12 +34,7 @@ function InputSection({onError,onAnalyze,obtainedReport}) {
             onError(msg);
             return;
         }
-        if (!gitHubUserName) {
-            const msg = "Please enter a GitHub Username.";
-            setError(msg);
-            onError(msg);
-            return;
-        }
+        // GitHub username is optional — backend can auto-detect from resume
         if (!targetRole) {
             const msg = "Please select a target role.";
             setError(msg);
