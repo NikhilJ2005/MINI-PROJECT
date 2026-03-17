@@ -213,7 +213,7 @@ async def _run_single_analysis(
 
     # ML predictions
     predictions = state.ml_model.predict(X)
-    lr_probabilities = predictions["lr_probabilities"]
+    ensemble_probabilities = predictions["ensemble_probabilities"]
 
     # Skill gap analysis
     analysis = state.skill_gap_analyzer.analyze(
@@ -222,7 +222,7 @@ async def _run_single_analysis(
         target_role=target_role,
         job_roles_data=state.job_roles_data,
         ml_predictions=predictions,
-        lr_probabilities=lr_probabilities,
+        probabilities=ensemble_probabilities,
         skill_matrix=skill_matrix,
     )
 

@@ -37,7 +37,7 @@ class SkillGapAnalyzer:
         target_role: str,
         job_roles_data: Dict,
         ml_predictions: Dict[str, list],
-        lr_probabilities: List[float],
+        probabilities: List[float],
         skill_matrix: pd.DataFrame,
     ) -> Dict:
         """
@@ -64,7 +64,7 @@ class SkillGapAnalyzer:
             target_role:         The job role to compare against.
             job_roles_data:      The full job roles dictionary.
             ml_predictions:      Dict with lr_predictions, dt_predictions keys.
-            lr_probabilities:    List of LR probability scores per skill.
+            probabilities:    List of LR probability scores per skill.
             skill_matrix:        The skill matrix DataFrame from feature engineering.
 
         Returns:
@@ -111,7 +111,7 @@ class SkillGapAnalyzer:
             # Get ML prediction and probability for this skill (if available)
             # The skill_matrix rows align with required + nice_to_have skills
             ml_pred = ml_predictions.get("lr_predictions", [0] * len(required_skills))
-            ml_prob = lr_probabilities
+            ml_prob = probabilities
 
             skill_analysis = {
                 "skill": skill,
@@ -165,8 +165,8 @@ class SkillGapAnalyzer:
         # Confidence score: average ML probability across ALL required skills
         # This gives an unbiased view of how confident the ML model is overall
         all_probs = [
-            lr_probabilities[i]
-            for i in range(min(len(required_skills), len(lr_probabilities)))
+            probabilities[i]
+            for i in range(min(len(required_skills), len(probabilities)))
         ]
 
         if all_probs:
