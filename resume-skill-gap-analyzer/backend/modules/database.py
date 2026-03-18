@@ -118,6 +118,12 @@ class Database:
                     ON batch_results(batch_id);
             """)
 
+            # Migration: add composite_score column if missing
+            try:
+                conn.execute("SELECT composite_score FROM analyses LIMIT 1")
+            except sqlite3.OperationalError:
+                conn.execute("ALTER TABLE analyses ADD COLUMN composite_score REAL DEFAULT 0")
+
     # -----------------------------------------------------------------
     #  Candidate CRUD
     # -----------------------------------------------------------------
@@ -187,14 +193,15 @@ class Database:
             cursor = conn.execute("""
                 INSERT INTO analyses
                     (candidate_id, target_role, match_score, gap_score,
-                     confidence, report_json, github_skills, missing_skills, analyzed_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     confidence, composite_score, report_json, github_skills, missing_skills, analyzed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 analysis_data["candidate_id"],
                 analysis_data["target_role"],
                 analysis_data.get("match_score", 0),
                 analysis_data.get("gap_score", 0),
                 analysis_data.get("confidence", 0),
+                analysis_data.get("composite_score", 0),
                 json.dumps(analysis_data.get("report", {})),
                 json.dumps(analysis_data.get("github_skills", [])),
                 json.dumps(analysis_data.get("missing_skills", [])),
@@ -248,12 +255,13 @@ class Database:
                     a.match_score,
                     a.gap_score,
                     a.confidence,
+                    a.composite_score,
                     a.missing_skills,
                     a.analyzed_at
                 FROM analyses a
                 JOIN candidates c ON c.id = a.candidate_id
                 WHERE a.target_role = ?
-                ORDER BY a.match_score DESC, a.confidence DESC
+                ORDER BY a.composite_score DESC, a.match_score DESC, a.confidence DESC
                 LIMIT ?
             """, (target_role, limit)).fetchall()
 
@@ -473,10 +481,67 @@ class Database:
                 LIMIT 5
             """).fetchall()
 
+            # Recent activity (last 5 analyses)
+            recent = conn.execute("""
+                SELECT c.name, a.target_role, a.match_score, a.confidence, a.analyzed_at
+                FROM analyses a
+                JOIN candidates c ON c.id = a.candidate_id
+                ORDER BY a.analyzed_at DESC
+                LIMIT 5
+            """).fetchall()
+
+            # Top candidates (highest match scores)
+            top_cands = conn.execute("""
+                SELECT c.name, a.target_role, a.match_score, a.confidence
+                FROM analyses a
+                JOIN candidates c ON c.id = a.candidate_id
+                ORDER BY a.match_score DESC, a.confidence DESC
+                LIMIT 5
+            """).fetchall()
+
+            # Score distribution buckets
+            score_dist = conn.execute("""
+                SELECT
+                    SUM(CASE WHEN match_score >= 75 THEN 1 ELSE 0 END) as excellent,
+                    SUM(CASE WHEN match_score >= 50 AND match_score < 75 THEN 1 ELSE 0 END) as good,
+                    SUM(CASE WHEN match_score >= 25 AND match_score < 50 THEN 1 ELSE 0 END) as fair,
+                    SUM(CASE WHEN match_score < 25 THEN 1 ELSE 0 END) as poor
+                FROM analyses
+            """).fetchone()
+
+            # Most common missing skills (aggregate from all analyses)
+            all_missing_rows = conn.execute(
+                "SELECT missing_skills FROM analyses WHERE missing_skills != '[]' ORDER BY analyzed_at DESC LIMIT 100"
+            ).fetchall()
+            skill_counts = {}
+            for row in all_missing_rows:
+                skills = json.loads(row["missing_skills"] or "[]")
+                for s in skills:
+                    skill_counts[s] = skill_counts.get(s, 0) + 1
+            top_gaps = sorted(skill_counts.items(), key=lambda x: -x[1])[:10]
+
             return {
                 "total_candidates": candidates,
                 "total_analyses": analyses,
                 "total_batches": batches,
                 "average_match_score": avg_score,
                 "top_roles": [{"role": r["target_role"], "count": r["cnt"]} for r in top_roles],
+                "recent_activity": [
+                    {"name": r["name"], "role": r["target_role"],
+                     "match_score": r["match_score"], "confidence": r["confidence"],
+                     "analyzed_at": r["analyzed_at"]}
+                    for r in recent
+                ],
+                "top_candidates": [
+                    {"name": r["name"], "role": r["target_role"],
+                     "match_score": r["match_score"], "confidence": r["confidence"]}
+                    for r in top_cands
+                ],
+                "score_distribution": {
+                    "excellent": score_dist["excellent"] or 0,
+                    "good": score_dist["good"] or 0,
+                    "fair": score_dist["fair"] or 0,
+                    "poor": score_dist["poor"] or 0,
+                },
+                "top_skill_gaps": [{"skill": s, "count": c} for s, c in top_gaps],
             }

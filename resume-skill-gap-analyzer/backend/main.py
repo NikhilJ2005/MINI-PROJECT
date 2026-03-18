@@ -52,6 +52,10 @@ from modules.groq_llm import (
     generate_jd_skills_extraction,
     generate_culture_fit_analysis,
 )
+from modules.web_search import (
+    is_available as serper_available,
+    enrich_learning_path,
+)
 from data.dataset_loader import DatasetLoader
 
 # ---------------------------------------------------------------------------
@@ -325,6 +329,12 @@ async def _run_single_analysis(
                 current_skills=all_candidate_skills,
             )
             if ai_learning_path:
+                # Enrich with real URLs from Serper if available
+                if serper_available():
+                    try:
+                        ai_learning_path = enrich_learning_path(ai_learning_path)
+                    except Exception as e:
+                        logger.warning(f"[WebSearch] Failed to enrich learning path: {e}")
                 report["ai_learning_path"] = ai_learning_path
 
             # AI Candidate Summary (recruiter-facing)
@@ -376,6 +386,7 @@ async def health_check():
         "total_candidates": stats["total_candidates"],
         "total_analyses": stats["total_analyses"],
         "llm_enabled": groq_available(),
+        "serper_enabled": serper_available(),
     }
 
 
@@ -485,6 +496,7 @@ async def analyze(
         "gap_score": result["analysis"]["gap_score"],
         "confidence": result["analysis"]["confidence"],
         "report": result["report"],
+        "composite_score": result["analysis"].get("composite_score", 0),
         "github_skills": result["demonstrated_skills"],
         "missing_skills": result["analysis"]["missing_required"],
     })
@@ -548,6 +560,7 @@ async def analyze_text(request: TextAnalyzeRequest):
         "gap_score": result["analysis"]["gap_score"],
         "confidence": result["analysis"]["confidence"],
         "report": result["report"],
+        "composite_score": result["analysis"].get("composite_score", 0),
         "github_skills": result["demonstrated_skills"],
         "missing_skills": result["analysis"]["missing_required"],
     })
@@ -959,7 +972,7 @@ async def retrain_model():
 
     X, y, source = state.dataset_loader.load_training_data()
     metrics = state.ml_model.train(X, y, dataset_source=source, use_cross_validation=True)
-    return {"status": "retrained", "dataset_source": source, "metrics": metrics}
+    return {"status": "retrained", "metrics": metrics}
 
 
 # ---------------------------------------------------------------------------

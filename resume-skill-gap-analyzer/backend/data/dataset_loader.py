@@ -6,10 +6,19 @@
  it into the 4-feature format the ML models expect, and blends with synthetic
  data for robust training.
 
- HuggingFace datasets used:
+ HuggingFace datasets used (12 sources):
    1. datasetmaster/resumes     — structured resumes with skills sections
    2. batuhanmtl/job-skill-set  — job categories with extracted skill sets
    3. fazni/roles-based-on-skills — roles mapped to required skills
+   4. jacob-hugging-face/job-descriptions — job descriptions with requirements
+   5. MikePfunk28/resume-training-dataset — 22k+ curated resume samples
+   6. NxtGenIntern/job_titles_and_descriptions — IT job roles with skills
+   7. InferencePrince55/machine-learning-dataset — ML-specific resumes
+   8. lukebarousse/data_jobs — data science/analytics job postings
+   9. cnamuangtoun/resume-job-description-fit — resume-to-job matching
+   10. Sachinkelenjagari/Resume_dataset — categorized resumes
+   11. ahmedheakl/resume-atlas — large resume corpus
+   12. jinaai/code_exercises — coding exercises with skill tags
 
  Feature format (per skill):
    - in_resume       (0/1) — skill found in candidate's resume
@@ -266,6 +275,70 @@ class DatasetLoader:
             logger.info(f"[DatasetLoader] lukebarousse/data_jobs → {len(rows)} samples")
         except Exception as e:
             logger.warning(f"[DatasetLoader] Could not load lukebarousse/data_jobs: {e}")
+
+        # --- Dataset 9: cnamuangtoun/resume-job-description-fit ---
+        # Resume-to-job matching data with skill annotations
+        try:
+            logger.info("[DatasetLoader] Loading cnamuangtoun/resume-job-description-fit...")
+            ds = load_dataset(
+                "cnamuangtoun/resume-job-description-fit",
+                split="train",
+                cache_dir=self.cache_dir,
+                trust_remote_code=True,
+            )
+            rows = self._transform_generic_skills_dataset(ds, seed=50)
+            all_rows.extend(rows)
+            logger.info(f"[DatasetLoader] cnamuangtoun/resume-job-description-fit → {len(rows)} samples")
+        except Exception as e:
+            logger.warning(f"[DatasetLoader] Could not load cnamuangtoun/resume-job-description-fit: {e}")
+
+        # --- Dataset 10: Sachinkelenjagari/Resume_dataset ---
+        # Resume dataset with categorized skills
+        try:
+            logger.info("[DatasetLoader] Loading Sachinkelenjagari/Resume_dataset...")
+            ds = load_dataset(
+                "Sachinkelenjagari/Resume_dataset",
+                split="train",
+                cache_dir=self.cache_dir,
+                trust_remote_code=True,
+            )
+            rows = self._transform_generic_skills_dataset(ds, seed=51)
+            all_rows.extend(rows)
+            logger.info(f"[DatasetLoader] Sachinkelenjagari/Resume_dataset → {len(rows)} samples")
+        except Exception as e:
+            logger.warning(f"[DatasetLoader] Could not load Sachinkelenjagari/Resume_dataset: {e}")
+
+        # --- Dataset 11: ahmedheakl/resume-atlas ---
+        # Large resume corpus with structured fields
+        try:
+            logger.info("[DatasetLoader] Loading ahmedheakl/resume-atlas...")
+            ds = load_dataset(
+                "ahmedheakl/resume-atlas",
+                split="train",
+                cache_dir=self.cache_dir,
+                trust_remote_code=True,
+            )
+            rows = self._transform_generic_skills_dataset(ds, seed=52)
+            all_rows.extend(rows)
+            logger.info(f"[DatasetLoader] ahmedheakl/resume-atlas → {len(rows)} samples")
+        except Exception as e:
+            logger.warning(f"[DatasetLoader] Could not load ahmedheakl/resume-atlas: {e}")
+
+        # --- Dataset 12: jinaai/code_exercises ---
+        # Coding exercises with skill tags — useful for tech skill patterns
+        try:
+            logger.info("[DatasetLoader] Loading jinaai/code_exercises...")
+            ds = load_dataset(
+                "jinaai/code_exercises",
+                split="train",
+                cache_dir=self.cache_dir,
+                trust_remote_code=True,
+            )
+            rows = self._transform_generic_skills_dataset(ds, seed=53)
+            all_rows.extend(rows)
+            logger.info(f"[DatasetLoader] jinaai/code_exercises → {len(rows)} samples")
+        except Exception as e:
+            logger.warning(f"[DatasetLoader] Could not load jinaai/code_exercises: {e}")
 
         if not all_rows:
             logger.warning("[DatasetLoader] No HuggingFace data loaded — using synthetic only")
