@@ -65,7 +65,26 @@ An AI-powered recruiting platform that analyzes resumes and GitHub profiles to i
 
 ## Setup Instructions
 
-### Option A: Docker (Recommended)
+### Option A: Railway (Recommended for Hosting — $5/mo)
+
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub Repo**
+2. Connect your GitHub repo
+
+**Deploy Backend:**
+- Click **Add Service** → **GitHub Repo** → set **Root Directory** to `resume-skill-gap-analyzer/backend`
+- Railway auto-detects Python via `nixpacks.toml` (installs deps + spaCy model)
+- Add environment variables: `GITHUB_TOKEN`, `GROQ_API_KEY` (both optional)
+- Deploy — note the public URL (e.g., `https://resume-analyzer-api-production.up.railway.app`)
+
+**Deploy Frontend:**
+- Click **Add Service** → **GitHub Repo** → set **Root Directory** to `resume-skill-gap-analyzer/frontend`
+- Set build command: `npm install && npm run build`, publish dir: `dist`
+- Add env var: `VITE_API_BASE_URL` = your backend URL from above
+- Deploy — your app is live!
+
+> Railway gives $5 free trial credit (no card needed). The $5/mo Hobby plan provides 8GB RAM and no cold starts.
+
+### Option B: Docker (Local)
 
 ```bash
 git clone <repo-url>
@@ -76,9 +95,13 @@ docker-compose up --build
 - Backend: http://localhost:8000
 - Frontend: http://localhost:5173
 
-### Option B: Manual Setup
+### Option C: Render (Free Tier)
 
-#### 1. Backend
+Use the `render.yaml` Blueprint at the repo root for one-click deployment. Note: free tier has 60-90s cold starts after 15 min idle.
+
+### Option D: Manual Setup
+
+#### 1. Backend (Manual)
 ```bash
 cd backend
 pip install -r requirements.txt
@@ -91,7 +114,7 @@ cp .env.example .env
 uvicorn main:app --reload --port 8000
 ```
 
-#### 2. Frontend
+#### 2. Frontend (Manual)
 ```bash
 cd frontend
 npm install
