@@ -1,7 +1,7 @@
 import { useState, useEffect, memo } from "react";
 import "./cssFile/AnalysisHistory.css";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 function groupByDate(analyses) {
   const now = new Date();

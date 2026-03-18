@@ -1,4 +1,12 @@
-# Multi-stage Dockerfile for Resume Skill Gap Analyzer
+# Stage 1: Build React frontend
+FROM node:20-alpine AS frontend-build
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ .
+RUN npm run build
+
+# Stage 2: Python backend + serve frontend static files
 FROM python:3.11-slim AS backend
 
 WORKDIR /app
@@ -14,6 +22,9 @@ RUN python -m spacy download en_core_web_sm
 
 # Copy backend code
 COPY backend/ .
+
+# Copy built frontend into static directory
+COPY --from=frontend-build /app/dist ./static
 
 EXPOSE 8000
 
