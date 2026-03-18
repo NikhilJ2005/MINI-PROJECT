@@ -1,33 +1,50 @@
 .tab-nav {
-  display: flex;
-  gap: 0;
   background: var(--card-bg, #fff);
-  border-bottom: 2px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.tab-nav-inner {
+  display: flex;
+  gap: 4px;
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 10px 24px;
   overflow-x: auto;
 }
 
 .tab-btn {
-  padding: 12px 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
   border: none;
   background: none;
-  font-size: 0.9rem;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
   font-weight: 500;
   color: var(--text-gray);
   cursor: pointer;
-  border-bottom: 3px solid transparent;
-  transition: color 0.2s, border-color 0.2s;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
   white-space: nowrap;
 }
 
 .tab-btn:hover {
   color: var(--primary);
+  background: var(--primary-50, rgba(37, 99, 235, 0.06));
 }
 
 .tab-btn.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
+  color: #fff;
+  background: var(--primary);
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+}
+
+.tab-icon {
+  font-size: 0.9rem;
+  line-height: 1;
 }
