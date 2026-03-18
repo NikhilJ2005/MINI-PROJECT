@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import "./cssFile/Role.css";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 function Role({onTargetSet}) {
     const [jobRoles, setJobRoles] = useState([]);
     const [loading, setLoading] = useState(true);

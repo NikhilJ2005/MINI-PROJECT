@@ -1,7 +1,7 @@
 import { useState } from "react";
 import "./cssFile/JDParser.css";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 function JDParser() {
   const [description, setDescription] = useState("");

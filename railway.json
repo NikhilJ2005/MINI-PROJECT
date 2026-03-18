@@ -3,7 +3,7 @@
   "build": {
     "builder": "DOCKERFILE",
     "dockerfilePath": "resume-skill-gap-analyzer/Dockerfile",
-    "watchPatterns": ["resume-skill-gap-analyzer/backend/**"]
+    "watchPatterns": ["resume-skill-gap-analyzer/**"]
   },
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
