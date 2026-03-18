@@ -15,11 +15,17 @@
    - Job description skill extraction
    - Batch executive summary for recruiters
    - Culture fit & soft skills analysis
+   - Retry logic with exponential backoff
+   - In-memory LRU response cache
+   - Model fallback chain
 =============================================================================
 """
 
+import hashlib
 import json
 import os
+import time
+from collections import OrderedDict
 from typing import Dict, List, Optional
 
 from loguru import logger
@@ -28,7 +34,17 @@ from loguru import logger
 _client = None
 _available = False
 
-MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+# Model fallback chain — try primary first, then fallbacks
+MODELS = [
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+]
+
+# Simple LRU cache (max 100 entries)
+_cache: OrderedDict = OrderedDict()
+_CACHE_MAX = 100
+_CACHE_TTL = 3600  # 1 hour
 
 
 def _get_client():
@@ -44,7 +60,7 @@ def _get_client():
         from groq import Groq
         _client = Groq(api_key=api_key)
         _available = True
-        logger.info("[GroqLLM] Client initialized with Llama 4 Scout model.")
+        logger.info("[GroqLLM] Client initialized with model fallback chain.")
         return _client
     except Exception as e:
         logger.warning(f"[GroqLLM] Failed to initialize: {e}")
@@ -58,29 +74,109 @@ def is_available() -> bool:
     return _available
 
 
-def _llm_call(system_prompt: str, user_prompt: str, json_mode: bool = False, max_tokens: int = 2048) -> Optional[str]:
-    """Make a single LLM call. Returns None on failure."""
+def _cache_key(system_prompt: str, user_prompt: str) -> str:
+    """Generate a cache key from prompts."""
+    content = f"{system_prompt}||{user_prompt}"
+    return hashlib.md5(content.encode()).hexdigest()
+
+
+def _cache_get(key: str) -> Optional[str]:
+    """Get from cache if not expired."""
+    if key in _cache:
+        result, ts = _cache[key]
+        if time.time() - ts < _CACHE_TTL:
+            _cache.move_to_end(key)
+            return result
+        else:
+            del _cache[key]
+    return None
+
+
+def _cache_set(key: str, value: str):
+    """Store in cache with LRU eviction."""
+    _cache[key] = (value, time.time())
+    if len(_cache) > _CACHE_MAX:
+        _cache.popitem(last=False)
+
+
+def _llm_call(
+    system_prompt: str,
+    user_prompt: str,
+    json_mode: bool = False,
+    max_tokens: int = 2048,
+    temperature: float = 0.3,
+    use_cache: bool = True,
+) -> Optional[str]:
+    """
+    Make an LLM call with retry logic, model fallback, and caching.
+
+    Retries: 3 attempts with 1s, 2s, 4s backoff on transient errors.
+    Fallback: Tries each model in MODELS list before giving up.
+    Cache: In-memory LRU cache with 1-hour TTL.
+    """
     client = _get_client()
     if not client:
         return None
-    try:
-        kwargs = {
-            "model": MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "temperature": 0.3,
-            "max_completion_tokens": max_tokens,
-        }
-        if json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        response = client.chat.completions.create(**kwargs)
-        return response.choices[0].message.content
-    except Exception as e:
-        logger.error(f"[GroqLLM] API call failed: {e}")
-        return None
 
+    # Check cache first
+    if use_cache:
+        key = _cache_key(system_prompt, user_prompt)
+        cached = _cache_get(key)
+        if cached:
+            logger.debug("[GroqLLM] Cache hit")
+            return cached
+
+    # Try each model in fallback chain
+    for model_idx, model in enumerate(MODELS):
+        # Retry loop with exponential backoff
+        for attempt in range(3):
+            try:
+                kwargs = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "temperature": temperature,
+                    "max_completion_tokens": max_tokens,
+                }
+                if json_mode:
+                    kwargs["response_format"] = {"type": "json_object"}
+                response = client.chat.completions.create(**kwargs)
+                result = response.choices[0].message.content
+
+                # Cache the result
+                if use_cache and result:
+                    _cache_set(_cache_key(system_prompt, user_prompt), result)
+
+                if model_idx > 0:
+                    logger.info(f"[GroqLLM] Succeeded with fallback model: {model}")
+                return result
+
+            except Exception as e:
+                error_str = str(e).lower()
+                is_transient = any(kw in error_str for kw in [
+                    "rate_limit", "rate limit", "timeout", "503", "529",
+                    "overloaded", "too many requests",
+                ])
+
+                if is_transient and attempt < 2:
+                    wait = (2 ** attempt)  # 1s, 2s, 4s
+                    logger.warning(f"[GroqLLM] Transient error (attempt {attempt+1}/3), retrying in {wait}s: {e}")
+                    time.sleep(wait)
+                    continue
+                elif model_idx < len(MODELS) - 1:
+                    logger.warning(f"[GroqLLM] Model {model} failed, trying fallback: {e}")
+                    break  # Try next model
+                else:
+                    logger.error(f"[GroqLLM] All models failed: {e}")
+                    return None
+    return None
+
+
+# =========================================================================
+#  Skill Extraction
+# =========================================================================
 
 def extract_skills_with_llm(resume_text: str, known_skills: List[str]) -> List[str]:
     """
@@ -99,7 +195,7 @@ def extract_skills_with_llm(resume_text: str, known_skills: List[str]) -> List[s
     )
     user_prompt = f"Resume text:\n{resume_text[:4000]}"
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, temperature=0.1)
     if not result:
         return []
 
@@ -114,6 +210,10 @@ def extract_skills_with_llm(resume_text: str, known_skills: List[str]) -> List[s
         logger.warning("[GroqLLM] Failed to parse skill extraction response")
         return []
 
+
+# =========================================================================
+#  AI Resume Coach
+# =========================================================================
 
 def generate_ai_feedback(
     resume_text: str,
@@ -146,7 +246,7 @@ def generate_ai_feedback(
         f"Resume excerpt:\n{resume_text[:3000]}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, temperature=0.4)
     if not result:
         return None
 
@@ -158,6 +258,10 @@ def generate_ai_feedback(
         logger.warning("[GroqLLM] Failed to parse AI feedback response")
         return None
 
+
+# =========================================================================
+#  Interview Questions
+# =========================================================================
 
 def generate_interview_questions(
     target_role: str,
@@ -190,7 +294,7 @@ def generate_interview_questions(
         f"Generate 5-7 targeted interview questions."
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, temperature=0.5)
     if not result:
         return None
 
@@ -203,6 +307,10 @@ def generate_interview_questions(
         logger.warning("[GroqLLM] Failed to parse interview questions response")
         return None
 
+
+# =========================================================================
+#  Learning Path
+# =========================================================================
 
 def generate_learning_path(
     target_role: str,
@@ -222,7 +330,8 @@ def generate_learning_path(
         "Return a JSON object with key 'learning_path' containing an array of objects, each with: "
         "'skill' (skill to learn), "
         "'week' (suggested week number, 1-8), "
-        "'resources' (array of 2-3 specific free learning resources with names and URLs), "
+        "'resources' (array of 2-3 learning resources, each as an object with 'name' (resource title/description) "
+        "and 'url' (the actual URL — only include a URL if you are confident it is correct, otherwise omit the url field)), "
         "'project_idea' (a specific mini-project to demonstrate this skill)."
     )
     user_prompt = (
@@ -232,7 +341,7 @@ def generate_learning_path(
         f"Create a structured learning plan for the missing skills."
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=3000)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=3000, temperature=0.3)
     if not result:
         return None
 
@@ -247,7 +356,7 @@ def generate_learning_path(
 
 
 # =========================================================================
-#  NEW: Recruiter-Focused AI Features
+#  Recruiter-Focused AI Features
 # =========================================================================
 
 def generate_candidate_summary(
@@ -293,7 +402,7 @@ def generate_candidate_summary(
         f"Resume excerpt:\n{resume_text[:2500]}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500, temperature=0.2)
     if not result:
         return None
 
@@ -346,7 +455,7 @@ def generate_batch_executive_report(
         f"Top Candidates:\n" + "\n".join(top_candidates)
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500, temperature=0.3)
     if not result:
         return None
 
@@ -381,7 +490,7 @@ def generate_jd_skills_extraction(
     )
     user_prompt = f"Job Description:\n{job_description[:4000]}"
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000, temperature=0.1)
     if not result:
         return None
 
@@ -422,7 +531,7 @@ def generate_culture_fit_analysis(
         f"Resume:\n{resume_text[:3500]}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500, temperature=0.3)
     if not result:
         return None
 

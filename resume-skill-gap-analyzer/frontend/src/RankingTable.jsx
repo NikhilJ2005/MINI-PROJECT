@@ -12,6 +12,7 @@ function RankingTable({ rankings }) {
           <tr>
             <th>Rank</th>
             <th>Name</th>
+            <th>Composite</th>
             <th>Match Score</th>
             <th>Confidence</th>
             <th>Resume Skills</th>
@@ -25,10 +26,11 @@ function RankingTable({ rankings }) {
               <td className="rank-cell">#{r.rank || i + 1}</td>
               <td className="name-cell">{r.name || r.filename || "Unknown"}</td>
               <td>
-                <span className={`score-badge ${getScoreClass(r.match_score)}`}>
-                  {Math.round(r.match_score)}%
+                <span className={`score-badge ${getScoreClass(r.composite_score ?? r.match_score)}`}>
+                  {Math.round(r.composite_score ?? r.match_score)}%
                 </span>
               </td>
+              <td>{Math.round(r.match_score)}%</td>
               <td>{Math.round(r.confidence)}%</td>
               <td>{r.resume_skills_count}</td>
               <td>{r.github_skills_count}</td>

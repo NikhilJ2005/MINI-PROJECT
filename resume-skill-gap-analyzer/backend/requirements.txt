@@ -18,6 +18,7 @@ spacy
 
 # --- HTTP & Config ---
 httpx
+requests
 python-dotenv
 
 # --- PDF Parsing ---

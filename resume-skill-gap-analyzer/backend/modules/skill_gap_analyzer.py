@@ -173,14 +173,42 @@ class SkillGapAnalyzer:
         else:
             confidence = 0.0
 
-        logger.info(f"[SkillGapAnalyzer] Match: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}%")
+        # --- Step 6: Calculate nice-to-have score ---
+        total_nice = len(nice_to_have)
+        present_nice = total_nice - len(missing_nice_to_have)
+        nice_to_have_score = round((present_nice / total_nice) * 100, 1) if total_nice > 0 else 0.0
+
+        # --- Step 7: Calculate composite ranking score ---
+        # Weighted formula combining multiple signals:
+        #   50% required skill coverage (most important)
+        #   15% nice-to-have coverage
+        #   15% ML confidence
+        #   10% GitHub evidence bonus (ratio of "strong" + "demonstrated_only" skills)
+        #   10% verification strength (ratio of "strong" skills among present skills)
+        github_skill_count = len(strengths) + len(hidden_strengths)
+        total_present = present_required + present_nice
+        github_bonus = min(100.0, (github_skill_count / max(total_required, 1)) * 100)
+        strong_ratio = (len(strengths) / max(total_present, 1)) * 100 if total_present > 0 else 0.0
+
+        composite_score = round(
+            match_score * 0.50 +
+            nice_to_have_score * 0.15 +
+            confidence * 0.15 +
+            github_bonus * 0.10 +
+            strong_ratio * 0.10,
+            1
+        )
+
+        logger.info(f"[SkillGapAnalyzer] Match: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}% | Composite: {composite_score}%")
         logger.debug(f"[SkillGapAnalyzer] Missing required: {missing_required}")
 
-        # --- Step 6: Compile and return the full analysis ---
+        # --- Step 8: Compile and return the full analysis ---
         return {
             "match_score": match_score,
             "gap_score": gap_score,
             "confidence": confidence,
+            "composite_score": composite_score,
+            "nice_to_have_score": nice_to_have_score,
             "required_analysis": required_analysis,
             "nice_to_have_analysis": nice_to_have_analysis,
             "missing_required": missing_required,

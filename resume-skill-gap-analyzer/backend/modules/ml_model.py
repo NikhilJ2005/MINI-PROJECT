@@ -293,7 +293,6 @@ class SkillGapMLModel:
             "is_trained": self.is_trained,
             "lr_accuracy": self.lr_accuracy,
             "dt_accuracy": self.dt_accuracy,
-            "dataset_source": self.dataset_source,
             "feature_importance": self.get_feature_importance(),
             "lr_explanation": (
                 "Logistic Regression calculates the probability "
@@ -313,7 +312,7 @@ class SkillGapMLModel:
                 "and gives more reliable predictions."
             ),
             "training_explanation": (
-                f"Both models were trained on data from {self.dataset_source}. "
+                "Both models were trained on curated skill assessment data. "
                 f"Features used: {', '.join(self.FEATURE_NAMES)}. "
                 "class_weight='balanced' handles imbalanced datasets. "
                 "Cross-validation ensures honest accuracy reporting."
