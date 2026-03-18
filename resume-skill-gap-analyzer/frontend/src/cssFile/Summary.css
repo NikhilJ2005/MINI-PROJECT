@@ -7,20 +7,32 @@
 
 .summary-card {
     background: var(--card-bg, white);
-    border-radius:8px;
-    box-shadow: var(--shadow);
-    padding: 20px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 22px;
     text-align: center;
+    border: 1px solid var(--border-light);
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+}
+
+.summary-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
 }
 
 .summary-card .stat-value {
     font-size: 1.8rem;
-    font-weight: 700;
+    font-weight: 800;
+    font-family: var(--font-heading);
     color: var(--primary);
+    line-height: 1;
 }
 
 .summary-card .stat-label {
-    font-size: 0.85rem;
-    color: var(--text-dark);
-    margin-top: 4px;
+    font-size: 0.82rem;
+    color: var(--text-gray);
+    margin-top: 6px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 }

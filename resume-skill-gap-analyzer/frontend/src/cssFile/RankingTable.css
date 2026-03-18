@@ -1,29 +1,46 @@
+/* ============================================
+   Ranking Table — Modernized
+   ============================================ */
+
 .ranking-table-wrapper {
   overflow-x: auto;
+  border-radius: var(--radius-lg);
 }
 
 .ranking-table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--card-bg, #fff);
-  border-radius: 8px;
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
 }
 
 .ranking-table th {
-  background: var(--primary);
-  color: #fff;
-  padding: 12px 16px;
+  background: var(--surface-1);
+  color: var(--text-dark);
+  padding: var(--space-3) var(--space-4);
   text-align: left;
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--border-light);
 }
 
 .ranking-table td {
-  padding: 10px 16px;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-light);
   font-size: 0.9rem;
+}
+
+.ranking-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.ranking-table tbody tr:hover {
+  background: var(--surface-1);
 }
 
 .ranking-table tr:last-child td {
@@ -31,48 +48,68 @@
 }
 
 .ranking-table tr.top-rank {
-  background: var(--background);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.08) 0%, transparent 60%);
+}
+
+.ranking-table tr.top-rank:hover {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.14) 0%, var(--surface-1) 60%);
 }
 
 .rank-cell {
-  font-weight: 700;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.05rem;
   color: var(--primary);
 }
 
+.top-rank .rank-cell {
+  color: var(--accent);
+}
+
 .name-cell {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .score-badge {
   display: inline-block;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 0.85rem;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
 }
 
 .score-badge.excellent {
   background: var(--color-strong-bg);
   color: var(--color-strong);
+  box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.15);
 }
 
 .score-badge.good {
   background: var(--color-claimed-bg);
   color: var(--color-claimed);
+  box-shadow: 0 0 0 1px rgba(202, 138, 4, 0.15);
 }
 
 .score-badge.fair {
   background: #fff7ed;
   color: #ea580c;
+  box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.15);
 }
 
 .score-badge.poor {
   background: var(--color-missing-bg);
   color: var(--color-missing);
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.15);
+}
+
+[data-theme="dark"] .score-badge.fair {
+  background: rgba(234, 88, 12, 0.15);
 }
 
 .no-data {
   text-align: center;
   color: var(--text-gray);
-  padding: 30px;
+  padding: var(--space-10);
+  font-size: 0.95rem;
 }

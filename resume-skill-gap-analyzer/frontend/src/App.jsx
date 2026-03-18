@@ -122,10 +122,12 @@ function App() {
       <header className="app-header">
         <div className="container header-row">
           <div>
-            <h1 className="app-title">Automated Recruiting Platform</h1>
+            <div className="brand-mark">
+              <span className="brand-icon">{"\u25C6"}</span>
+              <span className="brand-name">SkillSync</span>
+            </div>
             <p className="app-subtitle">
-              Upload resumes, rank candidates, compare skills, and discover skill
-              gaps for any target role — powered by Machine Learning.
+              AI-Powered Recruiting Platform — Analyze resumes, rank candidates, and discover skill gaps instantly.
             </p>
           </div>
           <button

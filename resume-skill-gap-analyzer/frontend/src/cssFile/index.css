@@ -1,31 +1,84 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  /* Typography */
+  --font-heading: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-body);
   line-height: 1.5;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
-  --primary: #2563EB;
+  /* Primary palette */
+  --primary: #2563eb;
   --primary-dark: #1d4ed8;
-  --secondary: #06B6D4;
-  --background: #e8f3ff;
-  --text-dark: #1E293B;
-  --text-gray:#6b6b6b;
-  --text-light: #FFFFFF;
-  --border-light: #E2E8F0;
-  --color-shadow: rgba(0, 0, 0, .08);
+  --primary-light: #3b82f6;
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-900: #1e3a8a;
+  --secondary: #06b6d4;
+  --secondary-light: #22d3ee;
+  --accent: #f59e0b;
+
+  /* Surfaces */
+  --background: #f0f4f8;
+  --surface-0: #ffffff;
+  --surface-1: #f8fafc;
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+  --card-bg: #ffffff;
+  --input-bg: #ffffff;
+
+  /* Text */
+  --text-dark: #0f172a;
+  --text-gray: #64748b;
+  --text-light: #ffffff;
+
+  /* Borders */
+  --border-light: #e2e8f0;
   --color-border: #e2e8f0;
-  --shadow: 0 1px 3px var(--color-shadow), 0 1px 2px var(--color-shadow);
-  --shadow-lg: 0 4px 12px var(--color-shadow), 0 2px 4px var(--color-shadow);
-  --max-width: 960px;
 
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --gradient-ai: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+  --gradient-success: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Border radius scale */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadow scale */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.07), 0 10px 30px rgba(0,0,0,0.05);
+  --shadow-xl: 0 20px 40px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.06);
+  --color-shadow: rgba(0, 0, 0, .06);
+
+  /* Layout */
+  --max-width: 1200px;
+
+  /* Semantic status colors */
   --color-excellent: #00bd45;
-  --color-good: #ffe100;
+  --color-good: #eab308;
   --color-fair: #ea580c;
-  --color-poor: #ff0000;
+  --color-poor: #ef4444;
 
+  /* Skill status colors */
   --color-strong: #16a34a;
   --color-strong-bg: #dcfce7;
   --color-claimed: #ca8a04;
@@ -40,8 +93,17 @@
 [data-theme="dark"] {
   --primary: #3b82f6;
   --primary-dark: #2563eb;
+  --primary-light: #60a5fa;
+  --primary-50: rgba(37, 99, 235, 0.1);
+  --primary-100: rgba(37, 99, 235, 0.2);
   --secondary: #22d3ee;
-  --background: #0f172a;
+  --background: #0b1120;
+  --surface-0: #1e293b;
+  --surface-1: #1e293b;
+  --surface-2: #334155;
+  --surface-3: #475569;
+  --card-bg: #1e293b;
+  --input-bg: #1e293b;
   --text-dark: #e2e8f0;
   --text-gray: #94a3b8;
   --text-light: #ffffff;
@@ -49,10 +111,11 @@
   --color-shadow: rgba(0, 0, 0, 0.3);
   --color-border: #334155;
   --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.2);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
-  --card-bg: #1e293b;
-  --input-bg: #1e293b;
-  --loading-overlay-bg: rgba(15, 23, 42, 0.8);
+  --shadow-xl: 0 20px 40px rgba(0,0,0,0.5), 0 8px 16px rgba(0,0,0,0.4);
+  --loading-overlay-bg: rgba(11, 17, 32, 0.85);
 }
 
 html,
@@ -63,8 +126,19 @@ body {
 
 body {
   background-color: var(--background);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-body);
   color: var(--text-dark);
   text-align: center;
   display: flex;
+}
+
+/* Heading typography */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+}
+
+/* Smooth transitions on interactive elements */
+button, a, input, select, textarea {
+  transition: all 0.2s ease;
 }

@@ -2,43 +2,57 @@
     overflow-x: auto;
 }
 
-.card{
-    background: var(--background);
-    border-radius:12px;
-    box-shadow: var(--shadow);
-    padding:20px;
+.card {
+    background: var(--surface-1);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    padding: 20px;
     text-align: left;
     margin-bottom: 15px;
+    border: 1px solid var(--border-light);
 }
-
 
 .skill-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .skill-table th {
-    padding: 12px 14px;
-    background: var(--card-bg, white);
+    padding: 14px 16px;
+    background: var(--surface-1, #f8fafc);
     color: var(--text-gray);
-    border-bottom: 2px solid var(--color-border);
-    font-size: 0.8rem;
+    border-bottom: 2px solid var(--border-light);
+    font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
+    font-weight: 700;
 }
 
 .skill-table td {
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--color-border);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-light);
 }
 
-/* Fade-in animation for table rows */
 .skill-table tbody tr {
     opacity: 0;
-    animation: fadeInRow 0.3s ease forwards;
+    animation: fadeInRow 0.35s ease forwards;
+    transition: background 0.15s ease;
 }
+
+.skill-table tbody tr:hover {
+    background: var(--primary-50, #eff6ff);
+}
+
+.skill-table tbody tr:nth-child(1) { animation-delay: 0.03s; }
+.skill-table tbody tr:nth-child(2) { animation-delay: 0.06s; }
+.skill-table tbody tr:nth-child(3) { animation-delay: 0.09s; }
+.skill-table tbody tr:nth-child(4) { animation-delay: 0.12s; }
+.skill-table tbody tr:nth-child(5) { animation-delay: 0.15s; }
+.skill-table tbody tr:nth-child(6) { animation-delay: 0.18s; }
+.skill-table tbody tr:nth-child(7) { animation-delay: 0.21s; }
+.skill-table tbody tr:nth-child(n+8) { animation-delay: 0.24s; }
 
 @keyframes fadeInRow {
     from { opacity: 0; transform: translateY(8px); }
@@ -46,17 +60,18 @@
 }
 
 /* --- Status Pill Badges --- */
-
 .status-pill {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.78rem;
+    padding: 5px 14px;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
     cursor: default;
+    letter-spacing: 0.2px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .status-icon {
@@ -69,13 +84,13 @@
 }
 
 .status-claimed_only {
-    background: var(--color-claimed-bg, #dbeafe);
-    color: var(--color-claimed, #2563eb);
+    background: var(--color-claimed-bg, #fef9c3);
+    color: var(--color-claimed, #ca8a04);
 }
 
 .status-demonstrated_only {
-    background: var(--color-demonstrated-bg, #f3e8ff);
-    color: var(--color-demonstrated, #7c3aed);
+    background: var(--color-demonstrated-bg, #dbeafe);
+    color: var(--color-demonstrated, #2563eb);
 }
 
 .status-missing {
@@ -83,7 +98,6 @@
     color: var(--color-missing, #dc2626);
 }
 
-/* Also keep old badge classes for backwards compat */
 .badge-strong { background: var(--color-strong-bg); color: var(--color-strong); }
 .badge-claimed_only { background: var(--color-claimed-bg); color: var(--color-claimed); }
 .badge-demonstrated_only { background: var(--color-demonstrated-bg); color: var(--color-demonstrated); }
@@ -98,8 +112,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
     font-size: 0.75rem;
     font-weight: 700;
@@ -124,16 +138,16 @@
 
 .confidence-bar {
     flex: 1;
-    height: 8px;
-    background: var(--border-light, #e2e8f0);
-    border-radius: 4px;
+    height: 6px;
+    background: var(--surface-3, #e2e8f0);
+    border-radius: 3px;
     overflow: hidden;
     max-width: 100px;
 }
 
 .confidence-bar-fill {
     height: 100%;
-    border-radius: 4px;
+    border-radius: 3px;
     transition: width 0.5s ease;
 }
 
@@ -141,4 +155,5 @@
     font-size: 0.8rem;
     font-weight: 600;
     min-width: 40px;
+    font-family: var(--font-heading);
 }

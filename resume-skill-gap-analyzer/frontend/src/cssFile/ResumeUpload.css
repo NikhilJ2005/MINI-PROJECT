@@ -1,7 +1,11 @@
+/* ============================================
+   Resume Upload — Modernized
+   ============================================ */
+
 .resume-upload-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .upload-label {
@@ -10,30 +14,32 @@
 }
 
 .upload-box {
-  border: 2px dashed var(--color-border);
-  border-radius: 12px;
-  padding: 30px;
+  border: 2px dashed var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  background-color: var(--input-bg, #fafafa);
-  margin-bottom:20px;
+  background-color: var(--surface-1);
+  margin-bottom: var(--space-5);
 }
 
-.upload-box:hover,.upload-box.dragging {
+.upload-box:hover,
+.upload-box.dragging {
   border-color: var(--primary);
-  background-color: var(--background);
+  background-color: var(--primary-50);
 }
 
 .upload-icon {
   font-size: 2rem;
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .upload-title {
   margin: 0;
   font-size: 16px;
+  font-weight: 600;
 }
 
 .upload-subtext {
@@ -43,13 +49,13 @@
 }
 
 .selected-file {
-  margin-top: 12px;
+  margin-top: var(--space-3);
   color: var(--primary);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .error-text {
-  margin-top: 10px;
-  color: #dc2626;
+  margin-top: var(--space-3);
+  color: var(--color-missing);
   font-size: 14px;
 }
