@@ -1,3 +1,7 @@
+/* ============================================
+   Candidates List — Modernized
+   ============================================ */
+
 .candidates-page {
   text-align: left;
 }
@@ -6,7 +10,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .candidates-header h2 {
@@ -19,20 +23,20 @@
 
 .search-bar {
   width: 100%;
-  padding: 10px 16px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
+  padding: var(--space-3) var(--space-4);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-md);
   font-size: 0.9rem;
-  background: var(--card-bg, #fff);
-  color: var(--text);
-  margin-bottom: 16px;
+  background: var(--card-bg);
+  color: var(--text-dark);
+  margin-bottom: var(--space-4);
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .search-bar:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 3px var(--primary-50);
 }
 
 .sortable {
@@ -48,19 +52,20 @@
 /* Empty state */
 .empty-state {
   text-align: center;
-  padding: 48px 24px;
-  background: var(--card-bg, #fff);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
+  padding: var(--space-10) var(--space-6);
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-light);
 }
 
 .empty-icon {
   font-size: 3rem;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-3);
 }
 
 .empty-state h3 {
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-2);
   font-size: 1.1rem;
 }
 
@@ -71,24 +76,24 @@
 
 /* Skeleton loading */
 .skeleton-table {
-  background: var(--card-bg, #fff);
-  border-radius: 8px;
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
 }
 
 .skeleton-row {
   display: flex;
-  gap: 16px;
-  padding: 14px 16px;
+  gap: var(--space-4);
+  padding: 14px var(--space-4);
   border-bottom: 1px solid var(--border-light);
 }
 
 .skeleton-cell {
   height: 16px;
   width: 60px;
-  background: var(--border-light, #e2e8f0);
-  border-radius: 4px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 
@@ -103,42 +108,56 @@
 
 /* Export button */
 .export-btn {
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 0.85rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  background: var(--primary);
+  background: var(--gradient-primary);
   color: #fff;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, transform 0.15s;
 }
 
 .export-btn:hover {
   opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .candidates-table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--card-bg, #fff);
-  border-radius: 8px;
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
 }
 
 .candidates-table th {
-  background: var(--primary);
-  color: #fff;
-  padding: 12px 16px;
+  background: var(--surface-1);
+  color: var(--text-dark);
+  padding: var(--space-3) var(--space-4);
   text-align: left;
-  font-size: 0.85rem;
+  font-family: var(--font-heading);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--border-light);
 }
 
 .candidates-table td {
-  padding: 10px 16px;
+  padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-light);
   font-size: 0.9rem;
+}
+
+.candidates-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.candidates-table tbody tr:hover {
+  background: var(--surface-1);
 }
 
 .candidates-table tr:last-child td {
@@ -147,26 +166,28 @@
 
 .action-cell {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .view-btn,
 .delete-btn {
   padding: 5px 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 0.8rem;
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
+  transition: transform 0.1s, opacity 0.2s;
 }
 
 .view-btn {
-  background: var(--primary);
+  background: var(--gradient-primary);
   color: #fff;
 }
 
 .view-btn:hover {
-  background: var(--primary-dark);
+  opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .delete-btn {
@@ -179,24 +200,28 @@
 }
 
 .candidate-detail-panel {
-  background: var(--card-bg, #fff);
-  border-radius: 12px;
-  padding: 24px;
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
   box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-light);
 }
 
 .back-btn {
   background: none;
   border: 1px solid var(--border-light);
-  padding: 6px 14px;
-  border-radius: 6px;
+  padding: var(--space-2) 14px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 0.85rem;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
+  color: var(--text-dark);
+  font-weight: 500;
 }
 
 .back-btn:hover {
-  background: var(--background);
+  background: var(--surface-1);
+  border-color: var(--primary);
 }
 
 .detail-info p {
@@ -207,28 +232,34 @@
 .skill-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 
 .skill-tag {
   background: var(--color-demonstrated-bg);
   color: var(--color-demonstrated);
   padding: 3px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-full);
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .analyses-section {
-  margin-top: 20px;
+  margin-top: var(--space-5);
 }
 
 .analysis-card {
-  background: var(--background);
-  border-radius: 8px;
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
   padding: 14px;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border-light);
+  transition: transform 0.15s ease;
+}
+
+.analysis-card:hover {
+  transform: translateX(4px);
 }
 
 .analysis-header {
@@ -244,5 +275,5 @@
 .analysis-meta {
   font-size: 0.85rem;
   color: var(--text-gray);
-  margin-top: 6px;
+  margin-top: var(--space-2);
 }
