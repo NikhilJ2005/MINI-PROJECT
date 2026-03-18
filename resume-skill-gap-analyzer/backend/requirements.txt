@@ -28,3 +28,12 @@ joblib
 
 # --- Structured logging ---
 loguru
+
+# --- DOCX Support ---
+python-docx
+
+# --- LLM Integration (Groq) ---
+groq
+
+# --- Rate Limiting ---
+slowapi

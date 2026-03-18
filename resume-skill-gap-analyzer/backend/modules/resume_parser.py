@@ -19,10 +19,14 @@ from typing import Dict, List, Optional
 
 import fitz  # PyMuPDF — high-performance PDF text extraction
 import spacy
+from loguru import logger
 
 
-def compile_skill_patterns(skills_master: Dict[str, List[str]]) -> Dict[str, "re.Pattern"]:
-    """Pre-compile regex patterns for all skills. Call once at startup."""
+def compile_skill_patterns(
+    skills_master: Dict[str, List[str]],
+    skill_aliases: Dict[str, str] = None,
+) -> Dict[str, "re.Pattern"]:
+    """Pre-compile regex patterns for all skills and aliases. Call once at startup."""
     patterns = {}
     for category, skills in skills_master.items():
         for skill in skills:
@@ -30,7 +34,29 @@ def compile_skill_patterns(skills_master: Dict[str, List[str]]) -> Dict[str, "re
                 patterns[skill] = re.compile(re.escape(skill.lower()))
             else:
                 patterns[skill] = re.compile(r"\b" + re.escape(skill.lower()) + r"\b")
+    # Compile alias patterns — map each alias to its canonical skill name
+    if skill_aliases:
+        for alias, canonical in skill_aliases.items():
+            if alias in ("C++", "C#"):
+                patterns[f"__alias__{alias}"] = re.compile(re.escape(alias.lower()))
+            else:
+                patterns[f"__alias__{alias}"] = re.compile(r"\b" + re.escape(alias.lower()) + r"\b")
     return patterns
+
+
+# Module-level alias mapping
+_skill_aliases: Dict[str, str] = {}
+
+
+def set_skill_aliases(aliases: Dict[str, str]) -> None:
+    """Set the module-level alias mapping."""
+    global _skill_aliases
+    _skill_aliases = aliases
+
+
+def get_skill_aliases() -> Dict[str, str]:
+    """Get the module-level alias mapping."""
+    return _skill_aliases
 
 
 # Module-level cache for compiled patterns
@@ -88,10 +114,9 @@ class ResumeParser:
         """Initialize the parser by loading the spaCy English NLP model."""
         try:
             self.nlp = spacy.load("en_core_web_sm")
-            print("   [ResumeParser] spaCy model loaded successfully.")
+            logger.info("[ResumeParser] spaCy model loaded successfully.")
         except OSError:
-            print("   [ResumeParser] WARNING: spaCy model 'en_core_web_sm' not found.")
-            print("   Run: python -m spacy download en_core_web_sm")
+            logger.warning("[ResumeParser] spaCy model 'en_core_web_sm' not found. Run: python -m spacy download en_core_web_sm")
             self.nlp = None
 
     # -----------------------------------------------------------------
@@ -120,13 +145,30 @@ class ResumeParser:
 
             page_count = len(doc)
             doc.close()
-            print(f"   [ResumeParser] Extracted text from PDF ({page_count} pages).")
+            logger.info(f"[ResumeParser] Extracted text from PDF ({page_count} pages).")
 
         except Exception as e:
-            print(f"   [ResumeParser] ERROR extracting PDF text: {e}")
+            logger.error(f"[ResumeParser] Error extracting PDF text: {e}")
             text = ""
 
         return text.strip()
+
+    # -----------------------------------------------------------------
+    #  DOCX Text Extraction
+    # -----------------------------------------------------------------
+    def extract_text_from_docx(self, file_bytes: bytes) -> str:
+        """Extract raw text from a DOCX file using python-docx."""
+        import io
+        try:
+            from docx import Document
+            doc = Document(io.BytesIO(file_bytes))
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+            text = "\n".join(paragraphs)
+            logger.info(f"[ResumeParser] Extracted text from DOCX ({len(paragraphs)} paragraphs).")
+            return text.strip()
+        except Exception as e:
+            logger.error(f"[ResumeParser] Error extracting DOCX text: {e}")
+            return ""
 
     # -----------------------------------------------------------------
     #  Plain Text Extraction
@@ -147,7 +189,7 @@ class ResumeParser:
         except UnicodeDecodeError:
             text = file_bytes.decode("latin-1")
 
-        print(f"   [ResumeParser] Extracted text from TXT ({len(text)} characters).")
+        logger.info(f"[ResumeParser] Extracted text from TXT ({len(text)} characters).")
         return text.strip()
 
     # -----------------------------------------------------------------
@@ -178,11 +220,18 @@ class ResumeParser:
         text_lower = text.lower()
 
         # Use pre-compiled patterns if available, otherwise compile on the fly
+        aliases = get_skill_aliases()
         patterns = get_compiled_patterns()
         if patterns:
-            for skill, pattern in patterns.items():
+            for key, pattern in patterns.items():
                 if pattern.search(text_lower):
-                    found_skills.add(skill)
+                    if key.startswith("__alias__"):
+                        alias_name = key[len("__alias__"):]
+                        canonical = aliases.get(alias_name)
+                        if canonical:
+                            found_skills.add(canonical)
+                    else:
+                        found_skills.add(key)
         else:
             # Fallback: flatten and compile per-request (slow path)
             all_skills = []
@@ -219,7 +268,7 @@ class ResumeParser:
 
         # Sort alphabetically for consistent output
         result = sorted(found_skills)
-        print(f"   [ResumeParser] Found {len(result)} skills in resume text.")
+        logger.info(f"[ResumeParser] Found {len(result)} skills in resume text.")
         return result
 
     # -----------------------------------------------------------------
@@ -358,8 +407,8 @@ class ResumeParser:
         if education_lines:
             info["education"] = " | ".join(education_lines[:3])
 
-        print(f"   [ResumeParser] Extracted info — Name: {info['name']}, "
-              f"Email: {info['email']}, GitHub: {info['github_username']}")
+        logger.info(f"[ResumeParser] Extracted info — Name: {info['name']}, "
+                    f"Email: {info['email']}, GitHub: {info['github_username']}")
         return info
 
     # -----------------------------------------------------------------
@@ -388,18 +437,18 @@ class ResumeParser:
               - extracted_skills: List of identified skill names
               - skill_count:      Number of skills found
         """
-        print(f"\n{'='*60}")
-        print(f"   [ResumeParser] Parsing file: {filename}")
-        print(f"{'='*60}")
+        logger.info(f"[ResumeParser] Parsing file: {filename}")
 
         # Route to the appropriate extractor based on file extension
         if filename.lower().endswith(".pdf"):
             raw_text = self.extract_text_from_pdf(file_bytes)
+        elif filename.lower().endswith(".docx"):
+            raw_text = self.extract_text_from_docx(file_bytes)
         elif filename.lower().endswith(".txt"):
             raw_text = self.extract_text_from_txt(file_bytes)
         else:
             # Unsupported format — return empty results
-            print(f"   [ResumeParser] ERROR: Unsupported file type: {filename}")
+            logger.error(f"[ResumeParser] Unsupported file type: {filename}")
             return {
                 "raw_text": "",
                 "extracted_skills": [],
@@ -408,7 +457,7 @@ class ResumeParser:
 
         # Handle empty extraction (corrupted file, etc.)
         if not raw_text or not raw_text.strip():
-            print("   [ResumeParser] WARNING: No text extracted from file.")
+            logger.warning("[ResumeParser] No text extracted from file.")
             raise ValueError(f"Could not extract text from '{filename}'. The file may be empty, corrupted, or image-based.")
 
         # Run spaCy NLP once and share the doc across both extraction methods

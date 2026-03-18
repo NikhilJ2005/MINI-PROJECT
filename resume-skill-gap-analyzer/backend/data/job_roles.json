@@ -1,114 +1,192 @@
 {
   "Data Scientist": {
     "required_skills": [
-      "Python",
-      "Machine Learning",
-      "Pandas",
-      "NumPy",
-      "Scikit-learn",
-      "SQL",
-      "Statistics"
+      "Python", "Machine Learning", "Pandas", "NumPy", "Scikit-learn",
+      "SQL", "Statistics"
     ],
     "nice_to_have": [
-      "TensorFlow",
-      "Deep Learning",
-      "R",
-      "Spark",
-      "Data Visualization",
-      "Matplotlib",
-      "Keras"
+      "TensorFlow", "Deep Learning", "R", "Spark", "Data Visualization",
+      "Matplotlib", "Keras", "NLP", "PyTorch", "Jupyter"
     ]
   },
   "Full Stack Developer": {
     "required_skills": [
-      "JavaScript",
-      "React",
-      "Node.js",
-      "REST API",
-      "SQL",
-      "Git",
-      "HTML",
-      "CSS"
+      "JavaScript", "React", "Node.js", "REST API", "SQL", "Git",
+      "HTML", "CSS"
     ],
     "nice_to_have": [
-      "TypeScript",
-      "Docker",
-      "MongoDB",
-      "GraphQL",
-      "Next.js",
-      "Testing"
+      "TypeScript", "Docker", "MongoDB", "GraphQL", "Next.js", "Testing",
+      "Redis", "CI/CD", "Tailwind CSS"
     ]
   },
   "Backend Developer": {
     "required_skills": [
-      "Python",
-      "REST API",
-      "SQL",
-      "Git",
-      "Docker"
+      "Python", "REST API", "SQL", "Git", "Docker"
     ],
     "nice_to_have": [
-      "Kubernetes",
-      "Redis",
-      "Microservices",
-      "CI/CD",
-      "PostgreSQL",
-      "Linux"
+      "Kubernetes", "Redis", "Microservices", "CI/CD", "PostgreSQL",
+      "Linux", "RabbitMQ", "Kafka", "gRPC"
     ]
   },
   "ML Engineer": {
     "required_skills": [
-      "Python",
-      "TensorFlow",
-      "Scikit-learn",
-      "Docker",
-      "Git",
-      "SQL"
+      "Python", "TensorFlow", "Scikit-learn", "Docker", "Git", "SQL"
     ],
     "nice_to_have": [
-      "Kubernetes",
-      "AWS",
-      "MLflow",
-      "Spark",
-      "PyTorch",
-      "Deep Learning"
+      "Kubernetes", "AWS", "MLflow", "Spark", "PyTorch", "Deep Learning",
+      "Airflow", "Ray", "Hugging Face"
     ]
   },
   "DevOps Engineer": {
     "required_skills": [
-      "Docker",
-      "Kubernetes",
-      "CI/CD",
-      "AWS",
-      "Linux",
-      "Git",
-      "Terraform"
+      "Docker", "Kubernetes", "CI/CD", "AWS", "Linux", "Git", "Terraform"
     ],
     "nice_to_have": [
-      "Ansible",
-      "Jenkins",
-      "Python",
-      "Monitoring",
-      "Azure",
-      "GCP"
+      "Ansible", "Jenkins", "Python", "Monitoring", "Azure", "GCP",
+      "Prometheus", "Grafana", "Helm", "ArgoCD"
     ]
   },
   "Frontend Developer": {
     "required_skills": [
-      "JavaScript",
-      "React",
-      "HTML",
-      "CSS",
-      "Git",
-      "REST API"
+      "JavaScript", "React", "HTML", "CSS", "Git", "REST API"
     ],
     "nice_to_have": [
-      "TypeScript",
-      "Webpack",
-      "Testing",
-      "Vue",
-      "Next.js",
-      "Tailwind CSS"
+      "TypeScript", "Webpack", "Testing", "Vue", "Next.js", "Tailwind CSS",
+      "Responsive Design", "Accessibility", "Storybook", "Figma"
+    ]
+  },
+  "AI/ML Research Engineer": {
+    "required_skills": [
+      "Python", "PyTorch", "Deep Learning", "Machine Learning",
+      "Statistics", "NLP", "NumPy"
+    ],
+    "nice_to_have": [
+      "TensorFlow", "Computer Vision", "Reinforcement Learning",
+      "Hugging Face", "LangChain", "Generative AI", "RAG", "Transformer",
+      "MATLAB", "R"
+    ]
+  },
+  "Data Engineer": {
+    "required_skills": [
+      "Python", "SQL", "Spark", "ETL", "Data Engineering", "Git"
+    ],
+    "nice_to_have": [
+      "Kafka", "Airflow", "AWS", "Docker", "Snowflake", "dbt",
+      "Data Warehouse", "BigQuery", "Hadoop", "Data Modeling"
+    ]
+  },
+  "Platform Engineer": {
+    "required_skills": [
+      "Kubernetes", "Docker", "Terraform", "CI/CD", "Linux", "Git",
+      "Python"
+    ],
+    "nice_to_have": [
+      "AWS", "Helm", "ArgoCD", "Prometheus", "Grafana", "Istio",
+      "Infrastructure as Code", "Pulumi", "Observability"
+    ]
+  },
+  "Site Reliability Engineer": {
+    "required_skills": [
+      "Linux", "Docker", "Kubernetes", "Monitoring", "CI/CD", "Python",
+      "Git"
+    ],
+    "nice_to_have": [
+      "Terraform", "Prometheus", "Grafana", "AWS", "Site Reliability Engineering",
+      "Chaos Engineering", "ELK Stack", "Datadog", "Observability"
+    ]
+  },
+  "iOS Developer": {
+    "required_skills": [
+      "Swift", "Git", "REST API", "Mobile Development"
+    ],
+    "nice_to_have": [
+      "Objective-C", "SwiftUI", "Firebase", "CI/CD", "Testing",
+      "Design Patterns", "Figma"
+    ]
+  },
+  "Android Developer": {
+    "required_skills": [
+      "Kotlin", "Java", "Git", "REST API", "Mobile Development"
+    ],
+    "nice_to_have": [
+      "Firebase", "Jetpack Compose", "CI/CD", "Testing", "Gradle",
+      "Design Patterns", "Figma"
+    ]
+  },
+  "Mobile Developer": {
+    "required_skills": [
+      "React Native", "JavaScript", "REST API", "Git",
+      "Mobile Development"
+    ],
+    "nice_to_have": [
+      "TypeScript", "Flutter", "Firebase", "Redux", "Testing", "CI/CD",
+      "Cross-Platform", "Figma"
+    ]
+  },
+  "Security Engineer": {
+    "required_skills": [
+      "Security", "Linux", "Python", "OWASP", "Git"
+    ],
+    "nice_to_have": [
+      "Penetration Testing", "Docker", "AWS", "Kubernetes", "Snyk",
+      "OAuth", "JWT", "Monitoring", "Terraform"
+    ]
+  },
+  "QA Engineer": {
+    "required_skills": [
+      "Testing", "Git", "JavaScript", "Selenium", "REST API"
+    ],
+    "nice_to_have": [
+      "Cypress", "Playwright", "Jest", "CI/CD", "Docker", "TDD",
+      "Postman", "Python", "JUnit", "PyTest"
+    ]
+  },
+  "Cloud Architect": {
+    "required_skills": [
+      "AWS", "Terraform", "Docker", "Kubernetes", "System Design",
+      "Microservices", "Linux"
+    ],
+    "nice_to_have": [
+      "Azure", "GCP", "Serverless", "Lambda", "CloudFormation",
+      "Infrastructure as Code", "Security", "Load Balancing", "CDN"
+    ]
+  },
+  "Database Administrator": {
+    "required_skills": [
+      "SQL", "PostgreSQL", "MySQL", "Linux", "Database Design",
+      "Data Modeling"
+    ],
+    "nice_to_have": [
+      "MongoDB", "Redis", "Oracle", "SQL Server", "Docker",
+      "Elasticsearch", "Normalization", "Python", "Monitoring"
+    ]
+  },
+  "Blockchain Developer": {
+    "required_skills": [
+      "Solidity", "JavaScript", "Blockchain", "Smart Contracts", "Git",
+      "Web3"
+    ],
+    "nice_to_have": [
+      "TypeScript", "React", "Node.js", "Docker", "REST API",
+      "Security", "Python", "Go"
+    ]
+  },
+  "Game Developer": {
+    "required_skills": [
+      "C++", "Game Development", "Git", "OOP", "Design Patterns"
+    ],
+    "nice_to_have": [
+      "Unity", "Unreal Engine", "C#", "Python", "Lua",
+      "Three.js", "System Design"
+    ]
+  },
+  "Embedded Systems Engineer": {
+    "required_skills": [
+      "C++", "Embedded Systems", "Linux", "Git", "Python"
+    ],
+    "nice_to_have": [
+      "RTOS", "IoT", "Assembly", "VHDL", "Verilog",
+      "Docker", "Testing", "System Design"
     ]
   }
 }

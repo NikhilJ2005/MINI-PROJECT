@@ -14,8 +14,8 @@ function ResumeUpload({onFileSelect}) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
-  const validTypes = ["application/pdf", "text/plain"];
-  const validExtensions = [".pdf", ".txt"];
+  const validTypes = ["application/pdf", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+  const validExtensions = [".pdf", ".txt", ".docx"];
 
   const handleFile = (file) => {
     if (!file) return;
@@ -29,7 +29,7 @@ function ResumeUpload({onFileSelect}) {
     } else {
       setFileName("");
       setFileSize(0);
-      setError("Only PDF or TXT files are allowed.");
+      setError("Only PDF, DOCX, or TXT files are allowed.");
       onFileSelect(null);
     }
   };
@@ -108,7 +108,7 @@ function ResumeUpload({onFileSelect}) {
         <p className="upload-title">
           <strong>Drag & drop your resume here</strong>
         </p>
-        <p className="upload-subtext">or click to browse / paste (Ctrl+V) &mdash; .pdf, .txt</p>
+        <p className="upload-subtext">or click to browse / paste (Ctrl+V) &mdash; .pdf, .docx, .txt</p>
 
         {fileName && (
           <p className="selected-file">
@@ -137,7 +137,7 @@ function ResumeUpload({onFileSelect}) {
       <input
         id="resume-upload"
         type="file"
-        accept=".pdf,.txt"
+        accept=".pdf,.docx,.txt"
         ref={fileInputRef}
         onChange={handleFileChange}
         hidden

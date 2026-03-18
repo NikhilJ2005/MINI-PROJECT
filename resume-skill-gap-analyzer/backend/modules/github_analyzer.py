@@ -20,6 +20,7 @@ import math
 from typing import Dict, List, Optional, Tuple
 
 import httpx
+from loguru import logger
 
 from modules.resume_parser import get_compiled_patterns
 
@@ -49,9 +50,9 @@ class GitHubAnalyzer:
         # Add authorization header if a token is provided
         if github_token:
             self.headers["Authorization"] = f"token {github_token}"
-            print("   [GitHubAnalyzer] Initialized with authentication token.")
+            logger.info("[GitHubAnalyzer] Initialized with authentication token.")
         else:
-            print("   [GitHubAnalyzer] Initialized WITHOUT token (rate-limited to 60 req/hr).")
+            logger.info("[GitHubAnalyzer] Initialized WITHOUT token (rate-limited to 60 req/hr).")
 
         # Shared async HTTP client with connection pooling
         self._client: Optional[httpx.AsyncClient] = None
@@ -83,7 +84,7 @@ class GitHubAnalyzer:
             "type": "owner",
         }
 
-        print(f"   [GitHubAnalyzer] Fetching repos for user: {username}")
+        logger.info(f"[GitHubAnalyzer] Fetching repos for user: {username}")
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -92,15 +93,15 @@ class GitHubAnalyzer:
                 response = await client.get(url, params=params)
 
                 if response.status_code == 404:
-                    print(f"   [GitHubAnalyzer] ERROR: User '{username}' not found (404).")
+                    logger.warning(f"[GitHubAnalyzer] User '{username}' not found (404).")
                     return [], f"GitHub user '{username}' not found."
 
                 if response.status_code == 403:
-                    print("   [GitHubAnalyzer] ERROR: Rate limit exceeded (403).")
+                    logger.error("[GitHubAnalyzer] Rate limit exceeded (403).")
                     return [], "GitHub API rate limit exceeded. Try again later or add a token."
 
                 if response.status_code != 200:
-                    print(f"   [GitHubAnalyzer] ERROR: HTTP {response.status_code}")
+                    logger.error(f"[GitHubAnalyzer] HTTP {response.status_code}")
                     return [], f"GitHub API error: HTTP {response.status_code}"
 
                 repos_data = response.json()
@@ -116,12 +117,12 @@ class GitHubAnalyzer:
                         "topics": repo.get("topics", []),
                     })
 
-                print(f"   [GitHubAnalyzer] Found {len(repos)} repositories.")
+                logger.info(f"[GitHubAnalyzer] Found {len(repos)} repositories.")
                 return repos, ""
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 wait = 2 ** attempt
-                print(f"   [GitHubAnalyzer] Retry {attempt+1}/{max_retries} after {e.__class__.__name__}, waiting {wait}s...")
+                logger.warning(f"[GitHubAnalyzer] Retry {attempt+1}/{max_retries} after {e.__class__.__name__}, waiting {wait}s...")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(wait)
                 else:
@@ -184,9 +185,7 @@ class GitHubAnalyzer:
         Perform a full analysis of a GitHub user's public profile.
         Now uses async httpx with concurrent requests for massive speedup.
         """
-        print(f"\n{'='*60}")
-        print(f"   [GitHubAnalyzer] Analyzing profile: {username}")
-        print(f"{'='*60}")
+        logger.info(f"[GitHubAnalyzer] Analyzing profile: {username}")
 
         # Step 1: Fetch all repos
         repos, error = await self.get_user_repos(username)
@@ -203,7 +202,7 @@ class GitHubAnalyzer:
 
         # Step 2: Filter out forked repos
         original_repos = [r for r in repos if not r["fork"]]
-        print(f"   [GitHubAnalyzer] Analyzing {len(original_repos)} original repos (skipped forks).")
+        logger.info(f"[GitHubAnalyzer] Analyzing {len(original_repos)} original repos (skipped forks).")
 
         # Step 3: Fetch languages and topics for ALL repos concurrently
         repo_data_tasks = [
@@ -225,8 +224,8 @@ class GitHubAnalyzer:
 
         all_topics = list(set(all_topics))
 
-        print(f"   [GitHubAnalyzer] Languages found: {list(language_bytes.keys())}")
-        print(f"   [GitHubAnalyzer] Topics found: {all_topics}")
+        logger.debug(f"[GitHubAnalyzer] Languages found: {list(language_bytes.keys())}")
+        logger.debug(f"[GitHubAnalyzer] Topics found: {all_topics}")
 
         # Step 4: Map languages and topics to master skills
         demonstrated_skills = set()
@@ -276,7 +275,7 @@ class GitHubAnalyzer:
                     skill_proficiency[skill] = 0.3
 
         # Step 6: Deep repo analysis — concurrent file fetches
-        print(f"   [GitHubAnalyzer] Running deep analysis on top repos...")
+        logger.info("[GitHubAnalyzer] Running deep analysis on top repos...")
         dep_skills = await self._deep_analyze_repos(username, original_repos[:10], all_master_skills)
         demonstrated_skills.update(dep_skills)
 
@@ -284,7 +283,7 @@ class GitHubAnalyzer:
         commit_stats = await self._get_commit_activity(username)
 
         demonstrated_list = sorted(demonstrated_skills)
-        print(f"   [GitHubAnalyzer] Demonstrated skills: {demonstrated_list}")
+        logger.info(f"[GitHubAnalyzer] Demonstrated skills: {demonstrated_list}")
 
         return {
             "repos_analyzed": len(original_repos),
@@ -320,28 +319,61 @@ class GitHubAnalyzer:
         "tensorflow": "TensorFlow", "torch": "PyTorch", "pytorch": "PyTorch",
         "keras": "Keras", "scikit-learn": "Scikit-learn", "sklearn": "Scikit-learn",
         "pandas": "Pandas", "numpy": "NumPy", "scipy": "Statistics",
-        "matplotlib": "Matplotlib", "plotly": "Data Visualization",
-        "sqlalchemy": "SQL", "psycopg2": "PostgreSQL", "pymongo": "MongoDB",
-        "redis": "Redis", "celery": "Celery", "pytest": "Testing",
-        "selenium": "Testing", "spacy": "NLP", "nltk": "NLP",
-        "transformers": "NLP", "opencv": "Computer Vision",
-        "mlflow": "MLflow", "airflow": "CI/CD",
+        "matplotlib": "Matplotlib", "plotly": "Data Visualization", "seaborn": "Seaborn",
+        "sqlalchemy": "SQLAlchemy", "psycopg2": "PostgreSQL", "pymongo": "MongoDB",
+        "redis": "Redis", "celery": "Celery", "pytest": "PyTest",
+        "selenium": "Selenium", "spacy": "NLP", "nltk": "NLP",
+        "transformers": "Hugging Face", "opencv": "Computer Vision",
+        "mlflow": "MLflow", "airflow": "Airflow", "prefect": "Prefect",
+        "dagster": "Dagster", "dbt": "dbt",
+        "langchain": "LangChain", "llamaindex": "LlamaIndex",
+        "chromadb": "ChromaDB", "pinecone": "Pinecone", "weaviate": "Weaviate",
+        "polars": "Polars", "duckdb": "DuckDB", "dask": "Dask", "ray": "Ray",
+        "pydantic": "FastAPI", "uvicorn": "FastAPI",
+        "great_expectations": "Great Expectations",
         # JavaScript/Node
         "react": "React", "react-dom": "React", "next": "Next.js",
-        "vue": "Vue", "angular": "Angular", "@angular/core": "Angular",
-        "express": "Express", "typescript": "TypeScript",
-        "webpack": "Webpack", "jest": "Testing", "mocha": "Testing",
-        "mongoose": "MongoDB", "sequelize": "SQL", "graphql": "GraphQL",
+        "vue": "Vue", "nuxt": "Nuxt.js", "svelte": "Svelte",
+        "angular": "Angular", "@angular/core": "Angular",
+        "express": "Express", "nestjs": "Nest.js", "@nestjs/core": "Nest.js",
+        "typescript": "TypeScript",
+        "webpack": "Webpack", "vite": "Vite", "esbuild": "esbuild",
+        "jest": "Jest", "mocha": "Mocha", "cypress": "Cypress", "playwright": "Playwright",
+        "mongoose": "Mongoose", "sequelize": "Sequelize", "prisma": "Prisma",
+        "drizzle-orm": "Drizzle", "typeorm": "TypeORM",
+        "graphql": "GraphQL", "@apollo/client": "GraphQL",
         "tailwindcss": "Tailwind CSS", "redux": "React",
+        "@mui/material": "Material UI", "@chakra-ui/react": "Chakra UI",
+        "styled-components": "Styled Components", "storybook": "Storybook",
+        "three": "Three.js", "d3": "D3.js", "chart.js": "Chart.js", "recharts": "Recharts",
+        "react-native": "React Native", "expo": "React Native",
+        "electron": "Electron", "tauri": "Tauri",
+        "remix": "Remix", "astro": "Astro", "gatsby": "Gatsby",
         # Docker/DevOps
         "docker": "Docker", "kubernetes": "Kubernetes", "k8s": "Kubernetes",
-        "terraform": "Terraform", "ansible": "Ansible",
-        "jenkins": "Jenkins", "nginx": "Linux",
+        "terraform": "Terraform", "ansible": "Ansible", "pulumi": "Pulumi",
+        "jenkins": "Jenkins", "nginx": "Nginx",
+        "helm": "Helm", "istio": "Istio", "argocd": "ArgoCD",
+        "prometheus": "Prometheus", "grafana": "Grafana",
+        "datadog": "Datadog", "sentry": "Sentry",
         # Cloud
-        "boto3": "AWS", "aws-sdk": "AWS",
+        "boto3": "AWS", "aws-sdk": "AWS", "aws-cdk": "AWS",
         "azure": "Azure", "@azure": "Azure",
         "google-cloud": "GCP", "@google-cloud": "GCP",
-        "firebase": "Firebase",
+        "firebase": "Firebase", "supabase": "Supabase",
+        # Data/Messaging
+        "kafka": "Kafka", "rabbitmq": "RabbitMQ", "amqplib": "RabbitMQ",
+        "elasticsearch": "Elasticsearch",
+        "snowflake-connector-python": "Snowflake",
+        "clickhouse-driver": "ClickHouse",
+        # Go
+        "gin": "Gin", "fiber": "Fiber", "echo": "Echo",
+        # Rust
+        "actix": "Actix", "rocket": "Rocket",
+        # Mobile
+        "flutter": "Flutter", "ionic": "Ionic",
+        # Blockchain
+        "ethers": "Solidity", "web3": "Web3", "hardhat": "Smart Contracts",
     }
 
     async def _deep_analyze_repos(
@@ -379,7 +411,7 @@ class GitHubAnalyzer:
                 skills = self._extract_skills_from_readme(content, master_skills)
                 found_skills.update(skills)
 
-        print(f"   [GitHubAnalyzer] Deep analysis found {len(found_skills)} additional skills")
+        logger.info(f"[GitHubAnalyzer] Deep analysis found {len(found_skills)} additional skills")
         return found_skills
 
     async def _get_file_content(self, username: str, repo_name: str, file_path: str) -> str:
