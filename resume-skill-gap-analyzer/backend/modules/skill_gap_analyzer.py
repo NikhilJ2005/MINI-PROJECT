@@ -18,6 +18,7 @@
 from typing import Dict, List
 
 import pandas as pd
+from loguru import logger
 
 
 class SkillGapAnalyzer:
@@ -25,7 +26,7 @@ class SkillGapAnalyzer:
 
     def __init__(self) -> None:
         """Initialize the skill gap analyzer."""
-        print("   [SkillGapAnalyzer] Initialized.")
+        logger.info("[SkillGapAnalyzer] Initialized.")
 
     # -----------------------------------------------------------------
     #  Main Analysis Method
@@ -70,9 +71,7 @@ class SkillGapAnalyzer:
         Returns:
             A comprehensive analysis dict (see structure below).
         """
-        print(f"\n{'='*60}")
-        print(f"   [SkillGapAnalyzer] Analyzing gaps for role: {target_role}")
-        print(f"{'='*60}")
+        logger.info(f"[SkillGapAnalyzer] Analyzing gaps for role: {target_role}")
 
         # --- Step 1: Get the role's requirements ---
         role_data = job_roles_data.get(target_role, {})
@@ -174,10 +173,8 @@ class SkillGapAnalyzer:
         else:
             confidence = 0.0
 
-        print(f"   [SkillGapAnalyzer] Match Score: {match_score}%")
-        print(f"   [SkillGapAnalyzer] Gap Score:   {gap_score}%")
-        print(f"   [SkillGapAnalyzer] Confidence:  {confidence}%")
-        print(f"   [SkillGapAnalyzer] Missing required: {missing_required}")
+        logger.info(f"[SkillGapAnalyzer] Match: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}%")
+        logger.debug(f"[SkillGapAnalyzer] Missing required: {missing_required}")
 
         # --- Step 6: Compile and return the full analysis ---
         return {

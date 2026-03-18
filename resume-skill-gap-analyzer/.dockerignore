@@ -1,0 +1,9 @@
+node_modules
+__pycache__
+*.pyc
+.git
+.env
+*.db
+datasets/hf_cache
+frontend/node_modules
+frontend/dist

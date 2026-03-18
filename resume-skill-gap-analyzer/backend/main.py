@@ -25,19 +25,23 @@ from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # Import all pipeline modules
-from modules.resume_parser import ResumeParser, compile_skill_patterns, set_compiled_patterns, get_compiled_patterns, set_flat_skills
+from modules.resume_parser import ResumeParser, compile_skill_patterns, set_compiled_patterns, get_compiled_patterns, set_flat_skills, set_skill_aliases
 from modules.github_analyzer import GitHubAnalyzer
 from modules.feature_engineering import FeatureEngineer
 from modules.ml_model import SkillGapMLModel
 from modules.skill_gap_analyzer import SkillGapAnalyzer
 from modules.report_generator import ReportGenerator
 from modules.database import Database
+from modules.groq_llm import is_available as groq_available, extract_skills_with_llm, generate_ai_feedback, generate_interview_questions, generate_learning_path
 from data.dataset_loader import DatasetLoader
 
 # ---------------------------------------------------------------------------
@@ -45,6 +49,10 @@ from data.dataset_loader import DatasetLoader
 # ---------------------------------------------------------------------------
 load_dotenv()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 # ---------------------------------------------------------------------------
 #  Application State — all pipeline components in one place
@@ -93,8 +101,17 @@ async def lifespan(app: FastAPI):
     total_skills = sum(len(v) for v in state.skills_master.values())
     logger.info(f"Loaded {total_skills} skills across {len(state.skills_master)} categories.")
 
+    # Load skill aliases
+    skill_aliases = {}
+    aliases_path = os.path.join(data_dir, "skill_aliases.json")
+    if os.path.exists(aliases_path):
+        with open(aliases_path, "r") as f:
+            skill_aliases = json.load(f)
+        set_skill_aliases(skill_aliases)
+        logger.info(f"Loaded {len(skill_aliases)} skill aliases.")
+
     # Pre-compile regex patterns for skill matching (used across all modules)
-    compiled_patterns = compile_skill_patterns(state.skills_master)
+    compiled_patterns = compile_skill_patterns(state.skills_master, skill_aliases)
     set_compiled_patterns(compiled_patterns)
     logger.info(f"Pre-compiled {len(compiled_patterns)} skill regex patterns.")
 
@@ -121,6 +138,10 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("Using cached models — skipping retraining")
 
+    # Check Groq LLM availability
+    llm_status = "enabled" if groq_available() else "disabled (set GROQ_API_KEY to enable)"
+    logger.info(f"Groq LLM integration: {llm_status}")
+
     logger.info(f"Server ready | LR acc: {state.ml_model.lr_accuracy}% | "
                 f"DT acc: {state.ml_model.dt_accuracy}% | "
                 f"Roles: {len(state.job_roles_data)} | Skills: {total_skills}")
@@ -142,9 +163,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS — use env var for production, default to permissive for dev
+cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -199,6 +225,19 @@ async def _run_single_analysis(
         except Exception as e:
             github_result["error"] = str(e)
 
+    # LLM-enhanced skill extraction (if Groq is available)
+    if groq_available():
+        try:
+            llm_extra_skills = extract_skills_with_llm(resume_text, claimed_skills)
+            if llm_extra_skills:
+                # Only add skills that are in the master list
+                all_master = [s for cat in state.skills_master.values() for s in cat]
+                valid_extras = [s for s in llm_extra_skills if s in all_master]
+                claimed_skills = list(set(claimed_skills) | set(valid_extras))
+                logger.info(f"[GroqLLM] Added {len(valid_extras)} LLM-detected skills")
+        except Exception as e:
+            logger.warning(f"[GroqLLM] Skill extraction failed (non-critical): {e}")
+
     # Feature engineering
     role_data = state.job_roles_data.get(target_role)
     if not role_data:
@@ -244,6 +283,43 @@ async def _run_single_analysis(
     if github_result.get("commit_activity"):
         report["github_insights"]["commit_activity"] = github_result["commit_activity"]
 
+    # --- Groq LLM-powered enhancements (optional, runs only if GROQ_API_KEY is set) ---
+    if groq_available():
+        try:
+            # AI Resume Coach feedback
+            ai_feedback = generate_ai_feedback(
+                resume_text=resume_text,
+                target_role=target_role,
+                missing_skills=analysis["missing_required"],
+                strengths=analysis["strengths"],
+                match_score=analysis["match_score"],
+            )
+            if ai_feedback:
+                report["ai_feedback"] = ai_feedback
+
+            # AI Interview Questions
+            ai_questions = generate_interview_questions(
+                target_role=target_role,
+                claimed_skills=claimed_skills,
+                missing_skills=analysis["missing_required"],
+                claims_not_proven=analysis.get("claims_not_proven", []),
+            )
+            if ai_questions:
+                report["ai_interview_questions"] = ai_questions
+
+            # AI Learning Path
+            all_candidate_skills = list(set(claimed_skills) | set(demonstrated_skills))
+            ai_learning_path = generate_learning_path(
+                target_role=target_role,
+                missing_skills=analysis["missing_required"] + analysis.get("missing_nice_to_have", []),
+                current_skills=all_candidate_skills,
+            )
+            if ai_learning_path:
+                report["ai_learning_path"] = ai_learning_path
+
+        except Exception as e:
+            logger.warning(f"[GroqLLM] Enhancement failed (non-critical): {e}")
+
     return {
         "report": report,
         "analysis": analysis,
@@ -266,6 +342,7 @@ async def health_check():
         "available_roles": list(state.job_roles_data.keys()),
         "total_candidates": stats["total_candidates"],
         "total_analyses": stats["total_analyses"],
+        "llm_enabled": groq_available(),
     }
 
 
@@ -305,7 +382,9 @@ async def get_skills_master():
 #  ENDPOINT: Analyze Single (File Upload)
 # ---------------------------------------------------------------------------
 @app.post("/analyze")
+@limiter.limit("10/minute")
 async def analyze(
+    request: Request,
     resume_file: UploadFile = File(...),
     github_username: str = Form(""),
     target_role: str = Form(...),
@@ -314,8 +393,8 @@ async def analyze(
                 f"GitHub: {github_username} | Role: {target_role}")
 
     filename = resume_file.filename or ""
-    if not filename.lower().endswith((".pdf", ".txt")):
-        raise HTTPException(400, "Unsupported file type. Upload .pdf or .txt.")
+    if not filename.lower().endswith((".pdf", ".txt", ".docx")):
+        raise HTTPException(400, "Unsupported file type. Upload .pdf, .docx, or .txt.")
 
     if target_role not in state.job_roles_data:
         raise HTTPException(400, f"Unknown role: '{target_role}'. Available: {list(state.job_roles_data.keys())}")
@@ -450,7 +529,9 @@ async def analyze_text(request: TextAnalyzeRequest):
 #  ENDPOINT: Batch Upload — Multiple Resumes
 # ---------------------------------------------------------------------------
 @app.post("/analyze-batch")
+@limiter.limit("3/minute")
 async def analyze_batch(
+    request: Request,
     resume_files: List[UploadFile] = File(...),
     target_role: str = Form(...),
 ):
@@ -474,7 +555,7 @@ async def analyze_batch(
         filename = resume_file.filename or f"resume_{i}.txt"
         logger.info(f"  Batch [{i+1}/{len(resume_files)}]: {filename}")
 
-        if not filename.lower().endswith((".pdf", ".txt")):
+        if not filename.lower().endswith((".pdf", ".txt", ".docx")):
             errors.append({"file": filename, "error": "Unsupported file type"})
             continue
 

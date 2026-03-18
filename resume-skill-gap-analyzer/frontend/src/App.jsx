@@ -5,6 +5,7 @@ import InputSection from "./InputSection";
 import Results from "./Results";
 import AnalysisHistory from "./AnalysisHistory";
 import ToastContainer from "./Toast";
+import ErrorBoundary from "./ErrorBoundary";
 
 // Lazy-load tab components that aren't shown by default
 const BatchUpload = lazy(() => import("./BatchUpload"));
@@ -169,18 +170,24 @@ function App() {
                   </div>
                 </div>
               )}
-              {report && <Results report={report} />}
+              {report && (
+                <ErrorBoundary>
+                  <Results report={report} />
+                </ErrorBoundary>
+              )}
             </>
           )}
 
-          <Suspense fallback={<TabFallback />}>
-            {activeTab === "batch" && <BatchUpload />}
-            {activeTab === "candidates" && <CandidatesList />}
-            {activeTab === "rankings" && <RankingsView />}
-            {activeTab === "compare" && <CompareView />}
-            {activeTab === "jd-parser" && <JDParser />}
-            {activeTab === "dashboard" && <DashboardStats />}
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<TabFallback />}>
+              {activeTab === "batch" && <BatchUpload />}
+              {activeTab === "candidates" && <CandidatesList />}
+              {activeTab === "rankings" && <RankingsView />}
+              {activeTab === "compare" && <CompareView />}
+              {activeTab === "jd-parser" && <JDParser />}
+              {activeTab === "dashboard" && <DashboardStats />}
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 

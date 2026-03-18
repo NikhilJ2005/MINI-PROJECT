@@ -19,13 +19,15 @@
 
 from typing import Dict, List
 
+from loguru import logger
+
 
 class ReportGenerator:
     """Compiles analysis results into a structured, presentation-ready report."""
 
     def __init__(self) -> None:
         """Initialize the report generator."""
-        print("   [ReportGenerator] Initialized.")
+        logger.info("[ReportGenerator] Initialized.")
 
     # -----------------------------------------------------------------
     #  Score Label Helper
@@ -153,9 +155,7 @@ class ReportGenerator:
         Returns:
             A fully structured report dict ready for JSON serialization.
         """
-        print(f"\n{'='*60}")
-        print(f"   [ReportGenerator] Generating report for: {target_role}")
-        print(f"{'='*60}")
+        logger.info(f"[ReportGenerator] Generating report for: {target_role}")
 
         match_score = analysis_result["match_score"]
         confidence = analysis_result["confidence"]
@@ -245,8 +245,7 @@ class ReportGenerator:
             "github_skills": github_skills,
         }
 
-        print(f"   [ReportGenerator] Report generated successfully.")
-        print(f"   [ReportGenerator] Match: {match_score}% ({executive_summary['match_label']})")
+        logger.info(f"[ReportGenerator] Report generated — Match: {match_score}% ({executive_summary['match_label']})")
         return report
 
     # -----------------------------------------------------------------
@@ -281,5 +280,5 @@ class ReportGenerator:
                 "suggested_path": self._get_resource_hint(skill),
             })
 
-        print(f"   [ReportGenerator] Learning path with {len(learning_path)} items.")
+        logger.info(f"[ReportGenerator] Learning path with {len(learning_path)} items.")
         return learning_path

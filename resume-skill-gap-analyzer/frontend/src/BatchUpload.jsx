@@ -16,12 +16,13 @@ function BatchUpload() {
 
   const handleFilesChange = (e) => {
     const selected = Array.from(e.target.files);
-    const valid = selected.filter((f) =>
-      f.name.toLowerCase().endsWith(".pdf") || f.name.toLowerCase().endsWith(".txt")
-    );
+    const valid = selected.filter((f) => {
+      const name = f.name.toLowerCase();
+      return name.endsWith(".pdf") || name.endsWith(".txt") || name.endsWith(".docx");
+    });
     setFiles(valid);
     if (valid.length < selected.length) {
-      setError(`${selected.length - valid.length} file(s) skipped (only .pdf/.txt allowed)`);
+      setError(`${selected.length - valid.length} file(s) skipped (only .pdf/.docx/.txt allowed)`);
     } else {
       setError("");
     }

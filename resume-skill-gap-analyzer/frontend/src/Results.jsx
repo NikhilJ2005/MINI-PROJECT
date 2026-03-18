@@ -148,6 +148,99 @@ const Results = memo(function Results({ report }) {
                     </div>
                 )}
 
+                {report.ai_feedback && (
+                    <div className="ai-feedback-section">
+                        <h3>AI Resume Coach</h3>
+                        <div className="ai-feedback-container">
+                            {report.ai_feedback.overall_advice && (
+                                <p className="ai-overall-advice">{report.ai_feedback.overall_advice}</p>
+                            )}
+                            {report.ai_feedback.resume_tips?.length > 0 && (
+                                <div className="ai-tips">
+                                    <h4>Improvement Tips</h4>
+                                    <ul>
+                                        {report.ai_feedback.resume_tips.map((tip, i) => (
+                                            <li key={i}>{tip}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {report.ai_feedback.bullet_suggestions?.length > 0 && (
+                                <div className="ai-bullets">
+                                    <h4>Suggested Bullet Points to Add</h4>
+                                    <ul>
+                                        {report.ai_feedback.bullet_suggestions.map((bullet, i) => (
+                                            <li key={i}>{bullet}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {report.ai_feedback.keyword_suggestions?.length > 0 && (
+                                <div className="ai-keywords">
+                                    <h4>ATS Keywords to Add</h4>
+                                    <div className="keyword-tags">
+                                        {report.ai_feedback.keyword_suggestions.map((kw, i) => (
+                                            <span key={i} className="keyword-tag">{kw}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {report.ai_interview_questions?.length > 0 && (
+                    <div className="ai-interview-section">
+                        <h3>AI Interview Prep</h3>
+                        <div className="interview-questions">
+                            {report.ai_interview_questions.map((q, i) => (
+                                <div key={i} className="interview-question-card">
+                                    <div className="question-header">
+                                        <span className={`badge badge-${q.difficulty === 'hard' ? 'Critical' : q.difficulty === 'medium' ? 'Recommended' : 'info'}`}>
+                                            {q.difficulty}
+                                        </span>
+                                        <span className="question-skill">{q.skill}</span>
+                                    </div>
+                                    <p className="question-text">{q.question}</p>
+                                    <p className="prep-hint"><strong>Prep hint:</strong> {q.prep_hint}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {report.ai_learning_path?.length > 0 && (
+                    <div className="ai-learning-section">
+                        <h3>AI Learning Path</h3>
+                        <div className="learning-path-timeline">
+                            {report.ai_learning_path.map((item, i) => (
+                                <div key={i} className="learning-path-item">
+                                    <div className="learning-week">Week {item.week || i + 1}</div>
+                                    <div className="learning-content">
+                                        <h4>{item.skill}</h4>
+                                        {item.resources?.length > 0 && (
+                                            <ul className="resource-list">
+                                                {item.resources.map((r, j) => (
+                                                    <li key={j}>
+                                                        {r.url ? (
+                                                            <a href={r.url} target="_blank" rel="noopener noreferrer">{r.name || r}</a>
+                                                        ) : (
+                                                            <span>{typeof r === 'string' ? r : r.name}</span>
+                                                        )}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                        {item.project_idea && (
+                                            <p className="project-idea"><strong>Project:</strong> {item.project_idea}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="github-insights">
                     <h3>GitHub Insights</h3>
                     <div className="github-insights-container">
