@@ -11,6 +11,10 @@
    - AI Resume Coach (personalized improvement suggestions)
    - Interview question generation
    - Smart learning path generation
+   - Candidate comparison summary (recruiter-facing)
+   - Job description skill extraction
+   - Batch executive summary for recruiters
+   - Culture fit & soft skills analysis
 =============================================================================
 """
 
@@ -239,4 +243,193 @@ def generate_learning_path(
         return path
     except json.JSONDecodeError:
         logger.warning("[GroqLLM] Failed to parse learning path response")
+        return None
+
+
+# =========================================================================
+#  NEW: Recruiter-Focused AI Features
+# =========================================================================
+
+def generate_candidate_summary(
+    candidate_name: str,
+    resume_text: str,
+    target_role: str,
+    match_score: float,
+    strengths: List[str],
+    missing_skills: List[str],
+    github_insights: Dict = None,
+) -> Optional[Dict]:
+    """
+    Generate a recruiter-facing executive summary for a single candidate.
+    This is the 'elevator pitch' a recruiter can paste into their ATS or email.
+    """
+    if not is_available():
+        return None
+
+    github_context = ""
+    if github_insights:
+        repos = github_insights.get("repos_analyzed", 0)
+        langs = [l.get("language", "") for l in github_insights.get("top_languages", [])]
+        github_context = f"\nGitHub: {repos} repos analyzed, top languages: {', '.join(langs)}"
+
+    system_prompt = (
+        "You are a senior technical recruiter writing a candidate assessment. "
+        "Write a concise, professional summary that another recruiter or hiring manager "
+        "can quickly scan to decide whether to move forward with the candidate. "
+        "Return a JSON object with keys: "
+        "'headline' (one-line candidate headline, e.g. 'Strong Python backend dev with ML experience'), "
+        "'executive_summary' (3-4 sentence paragraph assessing overall fit), "
+        "'top_strengths' (array of 3 strongest selling points as strings), "
+        "'risk_factors' (array of 1-3 potential concerns or gaps), "
+        "'hiring_recommendation' ('Strong Hire' / 'Hire' / 'Maybe' / 'Pass'), "
+        "'salary_positioning' (brief note on where they'd likely land: junior/mid/senior based on skills)."
+    )
+    user_prompt = (
+        f"Candidate: {candidate_name}\n"
+        f"Target Role: {target_role}\n"
+        f"Match Score: {match_score}%\n"
+        f"Key Strengths: {', '.join(strengths[:10])}\n"
+        f"Missing Skills: {', '.join(missing_skills[:8])}{github_context}\n"
+        f"Resume excerpt:\n{resume_text[:2500]}"
+    )
+
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500)
+    if not result:
+        return None
+
+    try:
+        data = json.loads(result)
+        logger.info(f"[GroqLLM] Generated candidate summary for {candidate_name}")
+        return data
+    except json.JSONDecodeError:
+        logger.warning("[GroqLLM] Failed to parse candidate summary response")
+        return None
+
+
+def generate_batch_executive_report(
+    target_role: str,
+    rankings: List[Dict],
+) -> Optional[Dict]:
+    """
+    Generate an executive summary for an entire batch of candidates.
+    Helps recruiters quickly understand the talent pool quality.
+    """
+    if not is_available():
+        return None
+
+    # Build a compact summary of top candidates
+    top_candidates = []
+    for r in rankings[:10]:
+        top_candidates.append(
+            f"#{r.get('rank', '?')} {r.get('name', 'Unknown')} — "
+            f"{r.get('match_score', 0):.0f}% match, "
+            f"{r.get('missing_count', 0)} gaps"
+        )
+
+    avg_score = sum(r.get("match_score", 0) for r in rankings) / max(len(rankings), 1)
+
+    system_prompt = (
+        "You are a recruiting analytics AI. Analyze this batch of candidates and provide "
+        "an executive summary for the hiring team. "
+        "Return a JSON object with keys: "
+        "'pool_quality' ('Excellent' / 'Good' / 'Fair' / 'Weak'), "
+        "'summary' (2-3 sentence overview of the talent pool), "
+        "'top_pick_rationale' (why the #1 candidate stands out), "
+        "'common_gaps' (array of skills most candidates are missing), "
+        "'hiring_advice' (1-2 sentences of actionable advice for the recruiter), "
+        "'diversity_of_skills' (brief note on whether candidates bring varied or similar backgrounds)."
+    )
+    user_prompt = (
+        f"Target Role: {target_role}\n"
+        f"Total Candidates: {len(rankings)}\n"
+        f"Average Match Score: {avg_score:.1f}%\n"
+        f"Top Candidates:\n" + "\n".join(top_candidates)
+    )
+
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500)
+    if not result:
+        return None
+
+    try:
+        data = json.loads(result)
+        logger.info(f"[GroqLLM] Generated batch executive report for {len(rankings)} candidates")
+        return data
+    except json.JSONDecodeError:
+        logger.warning("[GroqLLM] Failed to parse batch executive report")
+        return None
+
+
+def generate_jd_skills_extraction(
+    job_description: str,
+) -> Optional[Dict]:
+    """
+    Use LLM to intelligently parse a job description and extract structured skills.
+    Better than regex — understands context, synonyms, and implied requirements.
+    """
+    if not is_available():
+        return None
+
+    system_prompt = (
+        "You are an expert job description parser for a recruiting platform. "
+        "Extract all technical skills, tools, frameworks, and concepts from the job description. "
+        "Classify them as required vs nice-to-have based on context clues. "
+        "Return a JSON object with keys: "
+        "'required_skills' (array of must-have skill strings), "
+        "'nice_to_have' (array of preferred/bonus skill strings), "
+        "'experience_level' ('Junior' / 'Mid' / 'Senior' / 'Staff' / 'Principal'), "
+        "'role_summary' (one sentence describing the role)."
+    )
+    user_prompt = f"Job Description:\n{job_description[:4000]}"
+
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000)
+    if not result:
+        return None
+
+    try:
+        data = json.loads(result)
+        logger.info(f"[GroqLLM] Extracted skills from JD: "
+                     f"{len(data.get('required_skills', []))} required, "
+                     f"{len(data.get('nice_to_have', []))} nice-to-have")
+        return data
+    except json.JSONDecodeError:
+        logger.warning("[GroqLLM] Failed to parse JD skill extraction")
+        return None
+
+
+def generate_culture_fit_analysis(
+    resume_text: str,
+    target_role: str,
+) -> Optional[Dict]:
+    """
+    Analyze soft skills and cultural indicators from the resume.
+    Helps recruiters assess beyond just technical skills.
+    """
+    if not is_available():
+        return None
+
+    system_prompt = (
+        "You are a talent assessment specialist. Analyze the resume for soft skills, "
+        "leadership indicators, communication style, and cultural signals. "
+        "Return a JSON object with keys: "
+        "'soft_skills' (array of detected soft skills like 'Leadership', 'Collaboration', etc.), "
+        "'communication_score' (1-10 rating of how well the resume communicates), "
+        "'leadership_indicators' (array of specific examples from the resume showing leadership), "
+        "'team_fit_notes' (1-2 sentences on likely team dynamics), "
+        "'red_flags' (array of any concerning patterns, empty array if none)."
+    )
+    user_prompt = (
+        f"Target Role: {target_role}\n"
+        f"Resume:\n{resume_text[:3500]}"
+    )
+
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500)
+    if not result:
+        return None
+
+    try:
+        data = json.loads(result)
+        logger.info("[GroqLLM] Generated culture fit analysis")
+        return data
+    except json.JSONDecodeError:
+        logger.warning("[GroqLLM] Failed to parse culture fit analysis")
         return None

@@ -4,7 +4,8 @@
     "SQL", "Kotlin", "Swift", "Scala", "C#", "PHP", "Ruby", "Perl", "Shell",
     "Bash", "MATLAB", "Dart", "Lua", "Haskell", "Elixir", "Clojure",
     "Objective-C", "Assembly", "Groovy", "Julia", "VHDL", "Verilog",
-    "Solidity", "Move"
+    "Solidity", "Move", "Zig", "OCaml", "Erlang", "F#", "Nim", "Crystal",
+    "COBOL", "Fortran"
   ],
   "frameworks": [
     "React", "Angular", "Vue", "Django", "Flask", "FastAPI", "Spring",
@@ -19,7 +20,13 @@
     "Hugging Face", "LangChain", "LlamaIndex", "OpenCV",
     "Polars", "DuckDB", "Dask", "Ray",
     "Material UI", "Chakra UI", "Ant Design", "Styled Components",
-    "Storybook"
+    "Storybook",
+    "Hono", "Elysia", "Bun", "Deno Fresh", "SolidJS",
+    "tRPC", "Prisma", "Drizzle",
+    "CrewAI", "AutoGen", "Haystack",
+    "Streamlit", "Gradio", "Panel",
+    "XGBoost", "LightGBM", "CatBoost",
+    "Langfuse", "Weights & Biases", "Neptune"
   ],
   "tools": [
     "Git", "Docker", "Kubernetes", "Jenkins", "Terraform", "Ansible",
@@ -39,7 +46,13 @@
     "Selenium", "Cypress", "Playwright", "Puppeteer", "Jest",
     "Mocha", "PyTest", "JUnit",
     "Tableau", "Power BI", "Looker", "Metabase",
-    "Bun", "Deno"
+    "Bun", "Deno",
+    "Turborepo", "Nx", "Lerna",
+    "Trivy", "Falco", "OPA",
+    "OpenTelemetry", "Jaeger", "Zipkin",
+    "DVC", "Kubeflow", "Vertex AI",
+    "Ollama", "vLLM", "TensorRT",
+    "Cursor", "Copilot", "Claude Code"
   ],
   "cloud": [
     "AWS", "Azure", "GCP", "Heroku", "Vercel", "Firebase", "DigitalOcean",
@@ -48,7 +61,12 @@
     "Azure DevOps", "Azure Functions",
     "Cloud Run", "BigQuery", "Cloud Functions",
     "Supabase", "PlanetScale", "Neon",
-    "Render", "Railway", "Fly.io"
+    "Render", "Railway", "Fly.io",
+    "Cloudflare Workers", "Cloudflare R2",
+    "AWS Bedrock", "AWS SageMaker",
+    "Azure OpenAI", "Azure Cosmos DB",
+    "Google Vertex AI", "Google Pub/Sub",
+    "Upstash", "Convex", "Turso"
   ],
   "databases": [
     "MySQL", "PostgreSQL", "MongoDB", "Redis", "Cassandra", "SQLite",
@@ -56,7 +74,10 @@
     "CouchDB", "InfluxDB", "TimescaleDB", "ClickHouse", "Snowflake",
     "Cockroach", "ScyllaDB", "Memcached",
     "Prisma", "Sequelize", "TypeORM", "SQLAlchemy", "Mongoose", "Drizzle",
-    "Pinecone", "Weaviate", "ChromaDB", "Milvus", "pgvector"
+    "Pinecone", "Weaviate", "ChromaDB", "Milvus", "pgvector",
+    "Qdrant", "FAISS", "LanceDB",
+    "SurrealDB", "EdgeDB", "FaunaDB",
+    "Apache Iceberg", "Delta Lake", "Apache Hudi"
   ],
   "concepts": [
     "REST API", "GraphQL", "Microservices", "CI/CD", "Agile", "DevOps",
@@ -81,6 +102,14 @@
     "Mobile Development", "Cross-Platform", "PWA",
     "Game Development", "Unity", "Unreal Engine",
     "Embedded Systems", "IoT", "RTOS",
-    "Data Modeling", "Database Design", "Normalization"
+    "Data Modeling", "Database Design", "Normalization",
+    "Agentic AI", "Multi-Agent Systems", "Tool Use",
+    "Vector Search", "Semantic Search", "Embeddings",
+    "Model Serving", "Model Optimization", "Quantization",
+    "Feature Store", "Data Pipeline", "Stream Processing",
+    "Zero Trust", "Service Mesh", "API Gateway",
+    "Edge Computing", "WebAssembly", "WebRTC",
+    "A/B Testing", "Feature Flags", "Experimentation",
+    "Platform Engineering", "Developer Experience", "Internal Tools"
   ]
 }

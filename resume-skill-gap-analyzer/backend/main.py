@@ -41,7 +41,17 @@ from modules.ml_model import SkillGapMLModel
 from modules.skill_gap_analyzer import SkillGapAnalyzer
 from modules.report_generator import ReportGenerator
 from modules.database import Database
-from modules.groq_llm import is_available as groq_available, extract_skills_with_llm, generate_ai_feedback, generate_interview_questions, generate_learning_path
+from modules.groq_llm import (
+    is_available as groq_available,
+    extract_skills_with_llm,
+    generate_ai_feedback,
+    generate_interview_questions,
+    generate_learning_path,
+    generate_candidate_summary,
+    generate_batch_executive_report,
+    generate_jd_skills_extraction,
+    generate_culture_fit_analysis,
+)
 from data.dataset_loader import DatasetLoader
 
 # ---------------------------------------------------------------------------
@@ -316,6 +326,28 @@ async def _run_single_analysis(
             )
             if ai_learning_path:
                 report["ai_learning_path"] = ai_learning_path
+
+            # AI Candidate Summary (recruiter-facing)
+            candidate_name = (personal_info or {}).get("name", filename or "Candidate")
+            ai_summary = generate_candidate_summary(
+                candidate_name=candidate_name,
+                resume_text=resume_text,
+                target_role=target_role,
+                match_score=analysis["match_score"],
+                strengths=analysis["strengths"],
+                missing_skills=analysis["missing_required"],
+                github_insights=report.get("github_insights"),
+            )
+            if ai_summary:
+                report["ai_candidate_summary"] = ai_summary
+
+            # AI Culture Fit & Soft Skills
+            ai_culture = generate_culture_fit_analysis(
+                resume_text=resume_text,
+                target_role=target_role,
+            )
+            if ai_culture:
+                report["ai_culture_fit"] = ai_culture
 
         except Exception as e:
             logger.warning(f"[GroqLLM] Enhancement failed (non-critical): {e}")
@@ -639,7 +671,15 @@ async def analyze_batch(
 
     logger.info(f"Batch complete! {len(results)} analyzed, {len(errors)} errors")
 
-    return {
+    # AI-powered batch executive report for recruiters
+    ai_batch_report = None
+    if groq_available() and results:
+        try:
+            ai_batch_report = generate_batch_executive_report(target_role, results)
+        except Exception as e:
+            logger.warning(f"[GroqLLM] Batch report generation failed (non-critical): {e}")
+
+    response = {
         "batch_id": batch_id,
         "target_role": target_role,
         "total_submitted": len(resume_files),
@@ -648,6 +688,10 @@ async def analyze_batch(
         "rankings": results,
         "errors": errors,
     }
+    if ai_batch_report:
+        response["ai_executive_report"] = ai_batch_report
+
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -826,13 +870,45 @@ async def parse_job_description(request: JobDescriptionRequest):
             "nice_to_have": nice_to_have,
         }
 
-    return {
+    # Enhance with LLM-powered extraction if available
+    ai_jd_analysis = None
+    if groq_available():
+        try:
+            ai_jd_analysis = generate_jd_skills_extraction(text)
+            if ai_jd_analysis:
+                # Merge LLM-detected skills with regex-detected ones
+                llm_required = ai_jd_analysis.get("required_skills", [])
+                llm_nice = ai_jd_analysis.get("nice_to_have", [])
+                all_master = [s for cat in state.skills_master.values() for s in cat]
+                for s in llm_required:
+                    if s in all_master and s not in required_skills:
+                        required_skills.append(s)
+                for s in llm_nice:
+                    if s in all_master and s not in nice_to_have and s not in required_skills:
+                        nice_to_have.append(s)
+        except Exception as e:
+            logger.warning(f"[GroqLLM] JD parsing enhancement failed: {e}")
+
+    # Update roles data with final merged skills
+    if role_name and required_skills:
+        state.job_roles_data[role_name] = {
+            "required_skills": required_skills,
+            "nice_to_have": nice_to_have,
+        }
+
+    result = {
         "role_name": role_name,
         "required_skills": sorted(required_skills),
         "nice_to_have": sorted(nice_to_have),
-        "total_skills_found": len(found_skills),
+        "total_skills_found": len(set(required_skills + nice_to_have)),
         "added_to_roles": role_name in state.job_roles_data,
     }
+    if ai_jd_analysis:
+        result["ai_analysis"] = {
+            "experience_level": ai_jd_analysis.get("experience_level", ""),
+            "role_summary": ai_jd_analysis.get("role_summary", ""),
+        }
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -899,10 +975,277 @@ async def get_dataset_status():
 
 
 # ---------------------------------------------------------------------------
+#  ENDPOINT: Export Candidate Report as PDF (server-side generation)
+# ---------------------------------------------------------------------------
+from fastapi.responses import StreamingResponse, FileResponse
+import io
+
+
+@app.get("/export/pdf/{analysis_id}")
+async def export_pdf_report(analysis_id: int):
+    """
+    Generate a professional PDF report for a candidate analysis.
+    Server-side PDF generation handles large reports that crash browser-based
+    html2canvas. Uses structured text layout for recruiter-friendly output.
+    """
+    analysis = state.db.get_analysis_by_id(analysis_id)
+    if not analysis:
+        raise HTTPException(404, "Analysis not found.")
+
+    report = analysis["report_json"]
+    candidate = state.db.get_candidate(analysis["candidate_id"])
+
+    try:
+        import fitz  # PyMuPDF
+
+        doc = fitz.open()
+        WIDTH, HEIGHT = fitz.paper_size("a4")
+        MARGIN = 50
+        TEXT_WIDTH = WIDTH - 2 * MARGIN
+
+        def new_page():
+            page = doc.new_page(width=WIDTH, height=HEIGHT)
+            return page, MARGIN + 40
+
+        page, y = new_page()
+
+        def write_text(text, fontsize=10, bold=False, color=(0, 0, 0)):
+            nonlocal page, y
+            font = "helv" if not bold else "hebo"
+            lines = text.split("\n")
+            for line in lines:
+                if y > HEIGHT - MARGIN - 20:
+                    page, y = new_page()
+                page.insert_text(
+                    fitz.Point(MARGIN, y), line,
+                    fontsize=fontsize, fontname=font, color=color,
+                )
+                y += fontsize + 4
+
+        def write_separator():
+            nonlocal page, y
+            if y > HEIGHT - MARGIN - 20:
+                page, y = new_page()
+            page.draw_line(
+                fitz.Point(MARGIN, y), fitz.Point(WIDTH - MARGIN, y),
+                color=(0.8, 0.8, 0.8), width=0.5,
+            )
+            y += 12
+
+        # --- Title ---
+        write_text("SKILL GAP ANALYSIS REPORT", fontsize=18, bold=True, color=(0.1, 0.2, 0.5))
+        y += 5
+        write_text(f"Target Role: {report.get('target_role', 'N/A')}", fontsize=12, bold=True)
+        y += 3
+
+        # --- Candidate Info ---
+        if candidate:
+            name = candidate.get("name", "Unknown")
+            email = candidate.get("email", "")
+            github = candidate.get("github_username", "")
+            write_text(f"Candidate: {name}", fontsize=11)
+            if email:
+                write_text(f"Email: {email}", fontsize=10)
+            if github:
+                write_text(f"GitHub: {github}", fontsize=10)
+        y += 5
+        write_separator()
+
+        # --- Executive Summary ---
+        es = report.get("executive_summary", {})
+        write_text("EXECUTIVE SUMMARY", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+        y += 3
+        write_text(f"Match Score: {es.get('match_score', 0):.1f}% ({es.get('match_label', '')})", fontsize=11, bold=True)
+        write_text(f"Resume Skills: {es.get('total_resume_skills', 0)}  |  GitHub Skills: {es.get('total_github_skills', 0)}", fontsize=10)
+        write_text(f"Missing Critical Skills: {es.get('missing_critical_skills', 0)}", fontsize=10)
+        write_text(f"Confidence: {es.get('confidence_score', 0):.1f}% — {es.get('confidence_rating', '')}", fontsize=10)
+        y += 5
+
+        # --- AI Candidate Summary (if available) ---
+        ai_sum = report.get("ai_candidate_summary")
+        if ai_sum:
+            write_separator()
+            write_text("AI CANDIDATE ASSESSMENT", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            if ai_sum.get("headline"):
+                write_text(ai_sum["headline"], fontsize=11, bold=True)
+            if ai_sum.get("executive_summary"):
+                write_text(ai_sum["executive_summary"], fontsize=10)
+            if ai_sum.get("hiring_recommendation"):
+                write_text(f"Recommendation: {ai_sum['hiring_recommendation']}", fontsize=10, bold=True,
+                           color=(0.0, 0.5, 0.0) if "Hire" in ai_sum["hiring_recommendation"] else (0.7, 0.0, 0.0))
+            y += 5
+
+        # --- Skill Breakdown ---
+        write_separator()
+        write_text("SKILL BREAKDOWN", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+        y += 3
+
+        sb = report.get("skill_breakdown", {})
+        for skill_data in (sb.get("required_analysis") or []):
+            status = skill_data.get("status", "missing")
+            symbol = {"strong": "[OK]", "claimed_only": "[RESUME]", "demonstrated_only": "[GITHUB]", "missing": "[MISSING]"}.get(status, "[?]")
+            color = {"strong": (0, 0.5, 0), "claimed_only": (0.7, 0.5, 0), "demonstrated_only": (0, 0.4, 0.7), "missing": (0.8, 0, 0)}.get(status, (0, 0, 0))
+            write_text(f"  {symbol} {skill_data.get('skill', '?')} — {status}", fontsize=9, color=color)
+
+        y += 5
+        if sb.get("nice_to_have_analysis"):
+            write_text("Nice-to-Have Skills:", fontsize=10, bold=True)
+            for skill_data in sb["nice_to_have_analysis"]:
+                status = skill_data.get("status", "missing")
+                write_text(f"  {skill_data.get('skill', '?')} — {status}", fontsize=9)
+            y += 5
+
+        # --- Recommendations ---
+        recs = report.get("recommendations", [])
+        if recs:
+            write_separator()
+            write_text("RECOMMENDATIONS", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            for rec in recs[:10]:
+                priority_color = (0.8, 0, 0) if rec.get("priority") == "Critical" else (0.6, 0.4, 0)
+                write_text(f"  [{rec.get('priority', '')}] {rec.get('action', '')}", fontsize=9, color=priority_color)
+            y += 5
+
+        # --- AI Culture Fit (if available) ---
+        culture = report.get("ai_culture_fit")
+        if culture:
+            write_separator()
+            write_text("CULTURE & SOFT SKILLS", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            if culture.get("soft_skills"):
+                write_text(f"Soft Skills: {', '.join(culture['soft_skills'])}", fontsize=10)
+            if culture.get("communication_score"):
+                write_text(f"Communication Score: {culture['communication_score']}/10", fontsize=10)
+            if culture.get("team_fit_notes"):
+                write_text(f"Team Fit: {culture['team_fit_notes']}", fontsize=10)
+            y += 5
+
+        # --- Footer ---
+        write_separator()
+        write_text("Generated by Automated Recruiting Platform", fontsize=8, color=(0.5, 0.5, 0.5))
+
+        # Save to buffer
+        buf = io.BytesIO()
+        doc.save(buf)
+        doc.close()
+        buf.seek(0)
+
+        name = (candidate or {}).get("name", "Candidate")
+        role = report.get("target_role", "Role")
+        filename = f"Report_{name}_{role}.pdf".replace(" ", "_")
+
+        return StreamingResponse(
+            buf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    except Exception as e:
+        logger.error(f"PDF generation failed: {e}")
+        raise HTTPException(500, f"PDF generation failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+#  ENDPOINT: Export Batch Results as CSV (server-side, handles big data)
+# ---------------------------------------------------------------------------
+@app.get("/export/batch-csv/{batch_id}")
+async def export_batch_csv(batch_id: int):
+    """
+    Generate a comprehensive CSV export for a batch job.
+    Handles large batches that would be slow to export client-side.
+    """
+    job = state.db.get_batch_job(batch_id)
+    if not job:
+        raise HTTPException(404, "Batch job not found.")
+
+    import csv
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+
+    # Header
+    writer.writerow([
+        "Rank", "Name", "Email", "GitHub", "Match Score (%)",
+        "Gap Score (%)", "Confidence (%)", "Resume Skills Count",
+        "GitHub Skills Count", "Missing Skills Count", "Missing Skills",
+        "Filename",
+    ])
+
+    rankings = job.get("results", [])
+    for r in rankings:
+        writer.writerow([
+            r.get("rank", ""),
+            r.get("name", ""),
+            r.get("email", ""),
+            r.get("github_username", ""),
+            f"{r.get('match_score', 0):.1f}",
+            f"{r.get('gap_score', 0):.1f}",
+            f"{r.get('confidence', 0):.1f}",
+            r.get("resume_skills_count", 0),
+            r.get("github_skills_count", 0),
+            r.get("missing_count", 0),
+            "; ".join(r.get("missing_required", [])),
+            r.get("filename", ""),
+        ])
+
+    buf.seek(0)
+    role = job.get("target_role", "Role")
+    filename = f"Batch_{role}_{batch_id}.csv".replace(" ", "_")
+
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+#  ENDPOINT: Export All Candidates as CSV
+# ---------------------------------------------------------------------------
+@app.get("/export/candidates-csv")
+async def export_candidates_csv(target_role: str = ""):
+    """Export all candidates (optionally filtered by role) as CSV for ATS import."""
+    import csv
+
+    if target_role and target_role in state.job_roles_data:
+        rankings = state.db.get_ranked_candidates(target_role, limit=500)
+    else:
+        candidates_raw = state.db.get_all_candidates(limit=500, offset=0)
+        rankings = candidates_raw
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Candidate ID", "Name", "Email", "Phone", "GitHub",
+        "LinkedIn", "Education", "Skills Count",
+    ])
+
+    for c in rankings:
+        writer.writerow([
+            c.get("id", c.get("candidate_id", "")),
+            c.get("name", ""),
+            c.get("email", ""),
+            c.get("phone", ""),
+            c.get("github_username", ""),
+            c.get("linkedin_url", ""),
+            c.get("education", ""),
+            c.get("resume_skills_count", len(c.get("extracted_skills", []))),
+        ])
+
+    buf.seek(0)
+    filename = f"Candidates_{target_role or 'All'}.csv".replace(" ", "_")
+
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
 #  Serve React Frontend (static files from unified Docker build)
 # ---------------------------------------------------------------------------
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.isdir(static_dir):

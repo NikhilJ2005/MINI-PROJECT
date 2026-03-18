@@ -19,21 +19,143 @@
   margin-bottom: 24px;
 }
 
-.file-input {
+/* --- Drag & Drop Zone --- */
+.batch-drop-zone {
   width: 100%;
-  padding: 10px;
-  border: 2px dashed var(--border-light);
-  border-radius: 8px;
+  padding: 32px 20px;
+  border: 2px dashed var(--border-light, #d1d5db);
+  border-radius: 12px;
   cursor: pointer;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--bg-body, #fafbfc);
 }
 
-.file-count {
-  margin-top: 8px;
+.batch-drop-zone:hover,
+.batch-drop-zone.dragging {
+  border-color: var(--primary, #2563eb);
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.drop-zone-icon {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 8px;
+  color: var(--primary, #2563eb);
+  font-weight: bold;
+}
+
+.drop-zone-title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.drop-zone-subtitle {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-gray, #6b7280);
+}
+
+/* --- File Queue --- */
+.file-queue {
+  margin-top: 14px;
+  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.file-queue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-body, #f9fafb);
+  border-bottom: 1px solid var(--border-light, #e5e7eb);
+}
+
+.file-count-badge {
   font-size: 0.85rem;
-  color: var(--primary);
   font-weight: 600;
+  color: var(--primary, #2563eb);
 }
 
+.clear-all-btn {
+  background: none;
+  border: none;
+  color: #dc2626;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.clear-all-btn:hover {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.file-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.file-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-light, #f3f4f6);
+  font-size: 0.88rem;
+  transition: background 0.1s;
+}
+
+.file-list-item:last-child {
+  border-bottom: none;
+}
+
+.file-list-item:hover {
+  background: var(--bg-body, #f9fafb);
+}
+
+.file-list-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.file-list-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.file-list-size {
+  color: var(--text-gray, #6b7280);
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+
+.file-remove-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.file-remove-btn:hover {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+/* --- Loading --- */
 .batch-loading {
   text-align: center;
   padding: 30px;
@@ -49,6 +171,31 @@
   margin: 0 auto 12px;
 }
 
+.batch-progress-bar {
+  width: 100%;
+  max-width: 300px;
+  height: 4px;
+  background: var(--border-light, #e5e7eb);
+  border-radius: 2px;
+  margin: 12px auto 0;
+  overflow: hidden;
+}
+
+.batch-progress-fill {
+  height: 100%;
+  width: 30%;
+  background: var(--primary, #2563eb);
+  border-radius: 2px;
+  animation: progress-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes progress-pulse {
+  0% { width: 10%; margin-left: 0; }
+  50% { width: 40%; margin-left: 30%; }
+  100% { width: 10%; margin-left: 90%; }
+}
+
+/* --- Results --- */
 .batch-results {
   margin-top: 24px;
 }
@@ -61,6 +208,8 @@
   border-radius: 8px;
   box-shadow: var(--shadow);
   margin-bottom: 16px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .batch-stat {
@@ -70,6 +219,45 @@
 
 .batch-errors {
   margin-top: 16px;
+}
+
+/* --- AI Batch Report --- */
+.batch-ai-report {
+  background: var(--card-bg, #fff);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+  border-left: 4px solid #10b981;
+  box-shadow: var(--shadow);
+}
+
+.batch-ai-report h4 {
+  margin: 0 0 12px;
+  padding: 0;
+  color: var(--text-dark);
+}
+
+.pool-quality {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  margin-bottom: 10px;
+}
+
+.quality-excellent { background: #d1fae5; color: #065f46; }
+.quality-good { background: #dbeafe; color: #1e40af; }
+.quality-fair { background: #fef3c7; color: #92400e; }
+.quality-weak { background: #fee2e2; color: #991b1b; }
+
+.pool-summary,
+.top-pick,
+.common-gaps,
+.hiring-advice {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 6px 0;
+  color: var(--text-dark, #333);
 }
 
 .error-item {

@@ -304,6 +304,111 @@ h4{
     margin: 0;
 }
 
+/* --- AI Candidate Summary Section --- */
+.ai-candidate-summary-section,
+.ai-culture-section {
+    background: var(--card-bg, white);
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: var(--shadow-lg);
+    margin-bottom: 24px;
+    text-align: left;
+    border-left: 4px solid #10b981;
+}
+
+.ai-headline {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin: 0 0 12px;
+}
+
+.ai-exec-summary {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--text-dark);
+    background: var(--background);
+    padding: 14px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+}
+
+.hiring-recommendation {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    margin-bottom: 14px;
+}
+
+.rec-strong-hire, .rec-hire {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.rec-maybe {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.rec-pass {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.ai-strengths-list ul,
+.ai-risks-list ul,
+.leadership-list ul {
+    list-style: disc;
+    padding-left: 20px;
+    margin: 6px 0 14px;
+}
+
+.ai-strengths-list li,
+.ai-risks-list li,
+.leadership-list li {
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.ai-risks-list li {
+    color: #dc2626;
+}
+
+.salary-note,
+.team-fit {
+    font-size: 0.9rem;
+    color: var(--text-gray);
+    margin: 4px 0;
+}
+
+/* --- Culture & Soft Skills --- */
+.soft-skills-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.soft-skill-tag {
+    background: #ede9fe;
+    color: #5b21b6;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.comm-score {
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+    padding: 8px 14px;
+    background: var(--background);
+    border-radius: 8px;
+    display: inline-block;
+}
+
 .error-boundary {
     text-align: center;
     padding: 40px 20px;
