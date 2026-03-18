@@ -188,5 +188,100 @@
       "RTOS", "IoT", "Assembly", "VHDL", "Verilog",
       "Docker", "Testing", "System Design"
     ]
+  },
+  "AI Engineer": {
+    "required_skills": [
+      "Python", "LangChain", "REST API", "Git", "Machine Learning",
+      "Generative AI"
+    ],
+    "nice_to_have": [
+      "LlamaIndex", "RAG", "Prompt Engineering", "Docker", "FastAPI",
+      "Hugging Face", "Fine-tuning", "Transformer", "Pinecone", "ChromaDB"
+    ]
+  },
+  "Data Analyst": {
+    "required_skills": [
+      "SQL", "Python", "Data Visualization", "Statistics", "Pandas"
+    ],
+    "nice_to_have": [
+      "Tableau", "Power BI", "R", "Matplotlib", "Jupyter",
+      "NumPy", "Excel", "Looker", "Metabase", "dbt"
+    ]
+  },
+  "Technical Lead": {
+    "required_skills": [
+      "System Design", "Git", "REST API", "CI/CD", "Python",
+      "Microservices", "Docker"
+    ],
+    "nice_to_have": [
+      "Kubernetes", "AWS", "Agile", "Project Management", "Terraform",
+      "Monitoring", "Clean Architecture", "SOLID", "Design Patterns",
+      "Technical Writing"
+    ]
+  },
+  "Solutions Architect": {
+    "required_skills": [
+      "AWS", "System Design", "Microservices", "REST API", "Docker",
+      "SQL"
+    ],
+    "nice_to_have": [
+      "Azure", "GCP", "Terraform", "Kubernetes", "Serverless",
+      "Load Balancing", "CDN", "Security", "Infrastructure as Code",
+      "Event-Driven Architecture"
+    ]
+  },
+  "Product Engineer": {
+    "required_skills": [
+      "JavaScript", "React", "REST API", "Git", "SQL", "HTML", "CSS"
+    ],
+    "nice_to_have": [
+      "TypeScript", "Node.js", "Docker", "PostgreSQL", "Next.js",
+      "Agile", "Testing", "CI/CD", "Figma", "Tailwind CSS"
+    ]
+  },
+  "MLOps Engineer": {
+    "required_skills": [
+      "Python", "Docker", "Kubernetes", "MLflow", "CI/CD", "Git"
+    ],
+    "nice_to_have": [
+      "AWS", "Airflow", "Terraform", "Prometheus", "Grafana",
+      "Ray", "Spark", "DVC", "Great Expectations", "Dagster"
+    ]
+  },
+  "Rust Developer": {
+    "required_skills": [
+      "Rust", "Git", "System Design", "Linux", "REST API"
+    ],
+    "nice_to_have": [
+      "Docker", "Actix", "Rocket", "WebSocket", "gRPC",
+      "Kubernetes", "CI/CD", "Testing", "PostgreSQL"
+    ]
+  },
+  "Go Developer": {
+    "required_skills": [
+      "Go", "Git", "REST API", "Docker", "SQL"
+    ],
+    "nice_to_have": [
+      "Kubernetes", "gRPC", "Gin", "Microservices", "Redis",
+      "Kafka", "CI/CD", "PostgreSQL", "Prometheus", "Linux"
+    ]
+  },
+  "Technical Writer": {
+    "required_skills": [
+      "Technical Writing", "Git", "API Design", "OpenAPI"
+    ],
+    "nice_to_have": [
+      "JavaScript", "Python", "REST API", "Markdown", "Confluence",
+      "Notion", "Swagger", "HTML", "CSS"
+    ]
+  },
+  "Scrum Master": {
+    "required_skills": [
+      "Agile", "Scrum", "Project Management", "Jira"
+    ],
+    "nice_to_have": [
+      "Kanban", "Confluence", "Slack", "Git", "CI/CD",
+      "Notion", "Technical Writing"
+    ]
   }
 }

@@ -235,6 +235,38 @@ class DatasetLoader:
         except Exception as e:
             logger.warning(f"[DatasetLoader] Could not load NxtGenIntern/job_titles_and_descriptions: {e}")
 
+        # --- Dataset 7: InferencePrince55/machine-learning-dataset ---
+        # ML-specific resumes with technical skill sections
+        try:
+            logger.info("[DatasetLoader] Loading InferencePrince55/machine-learning-dataset...")
+            ds = load_dataset(
+                "InferencePrince55/machine-learning-dataset",
+                split="train",
+                cache_dir=self.cache_dir,
+                trust_remote_code=True,
+            )
+            rows = self._transform_generic_skills_dataset(ds, seed=48)
+            all_rows.extend(rows)
+            logger.info(f"[DatasetLoader] InferencePrince55/machine-learning-dataset → {len(rows)} samples")
+        except Exception as e:
+            logger.warning(f"[DatasetLoader] Could not load InferencePrince55/machine-learning-dataset: {e}")
+
+        # --- Dataset 8: lukebarousse/data_jobs ---
+        # Data science/analytics job postings with real skills
+        try:
+            logger.info("[DatasetLoader] Loading lukebarousse/data_jobs...")
+            ds = load_dataset(
+                "lukebarousse/data_jobs",
+                split="train",
+                cache_dir=self.cache_dir,
+                trust_remote_code=True,
+            )
+            rows = self._transform_generic_skills_dataset(ds, seed=49)
+            all_rows.extend(rows)
+            logger.info(f"[DatasetLoader] lukebarousse/data_jobs → {len(rows)} samples")
+        except Exception as e:
+            logger.warning(f"[DatasetLoader] Could not load lukebarousse/data_jobs: {e}")
+
         if not all_rows:
             logger.warning("[DatasetLoader] No HuggingFace data loaded — using synthetic only")
             return None
@@ -732,10 +764,69 @@ class DatasetLoader:
                 continue
         return rows
 
+    def _transform_generic_skills_dataset(self, ds, seed: int = 48) -> List[dict]:
+        """
+        Generic transformer for datasets with text fields containing skills.
+        Works with any dataset that has text-like columns — extracts skills
+        from all string fields and simulates candidate profiles.
+        """
+        rows = []
+        np.random.seed(seed)
+        max_samples = min(len(ds), 600)
+
+        for i in range(max_samples):
+            try:
+                record = ds[i]
+                found_skills = set()
+
+                # Try to extract skills from every string field in the record
+                for key, val in record.items() if isinstance(record, dict) else []:
+                    if val and isinstance(val, str) and len(val) > 20:
+                        found_skills.update(self._match_skills(val))
+                    elif isinstance(val, list):
+                        for item in val:
+                            if isinstance(item, str):
+                                found_skills.update(self._match_skills(item))
+
+                if not found_skills or len(found_skills) < 2:
+                    continue
+
+                # Simulate 2 candidate profiles
+                for _ in range(2):
+                    coverage = np.random.uniform(0.3, 0.85)
+                    n_skills = max(1, int(len(found_skills) * coverage))
+                    candidate_has = set(np.random.choice(
+                        list(found_skills), size=min(n_skills, len(found_skills)), replace=False
+                    ))
+
+                    # Pick a random role for required context
+                    required = set()
+                    if self.job_roles:
+                        role_data = list(self.job_roles.values())[
+                            np.random.randint(len(self.job_roles))]
+                        required = set(role_data.get("required_skills", []))
+
+                    all_skills = found_skills | required
+                    for skill in all_skills:
+                        has_skill = skill in candidate_has
+                        in_resume = 1 if has_skill and np.random.random() < 0.82 else 0
+                        in_github = 1 if has_skill and np.random.random() < 0.50 else 0
+                        both = 1 if (in_resume and in_github) else 0
+                        is_req = 1 if skill in required else 0
+                        label = 1 if (in_resume or in_github) else 0
+                        rows.append({
+                            'in_resume': in_resume, 'in_github': in_github,
+                            'both_confirmed': both, 'is_required': is_req,
+                            'label': label,
+                        })
+            except Exception:
+                continue
+        return rows
+
     # -----------------------------------------------------------------
     #  Enhanced Synthetic Data (always included)
     # -----------------------------------------------------------------
-    def _generate_synthetic_data(self, n_samples: int = 800) -> pd.DataFrame:
+    def _generate_synthetic_data(self, n_samples: int = 1200) -> pd.DataFrame:
         """
         Generate synthetic training data with realistic distributions.
 

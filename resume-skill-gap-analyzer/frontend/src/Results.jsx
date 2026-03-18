@@ -16,8 +16,36 @@ const Results = memo(function Results({ report }) {
     const maxLang = git_insights?.top_languages?.[0]?.bytes || 1;
     const resultsRef = useRef(null);
 
-    // --- PDF Export ---
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+
+    // --- PDF Export (server-side for large reports, client-side fallback) ---
     const handleExportPDF = useCallback(async () => {
+        const analysisId = report.analysis_id;
+
+        // Try server-side PDF first (handles large reports reliably)
+        if (analysisId) {
+            try {
+                showToast("Generating PDF on server...", "info");
+                const res = await fetch(`${API_BASE_URL}/export/pdf/${analysisId}`);
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    const name = report.candidate_info?.name || "Candidate";
+                    const role = report.target_role || "Role";
+                    link.download = `Report_${name}_${role}.pdf`;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                    showToast("PDF downloaded!", "success");
+                    return;
+                }
+            } catch (err) {
+                console.warn("Server PDF failed, falling back to client-side:", err);
+            }
+        }
+
+        // Fallback: client-side PDF with html2canvas
         if (!resultsRef.current) return;
         try {
             showToast("Generating PDF...", "info");
@@ -30,7 +58,29 @@ const Results = memo(function Results({ report }) {
             const pdf = new jsPDF("p", "mm", "a4");
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-            pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+
+            // Handle multi-page PDFs for large reports
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            if (pdfHeight > pageHeight) {
+                let yOffset = 0;
+                while (yOffset < canvas.height) {
+                    if (yOffset > 0) pdf.addPage();
+                    const srcY = yOffset;
+                    const srcH = Math.min(canvas.height - yOffset, (pageHeight / pdfWidth) * canvas.width);
+                    const tmpCanvas = document.createElement("canvas");
+                    tmpCanvas.width = canvas.width;
+                    tmpCanvas.height = srcH;
+                    const ctx = tmpCanvas.getContext("2d");
+                    ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+                    const pageImg = tmpCanvas.toDataURL("image/png");
+                    const h = (srcH * pdfWidth) / canvas.width;
+                    pdf.addImage(pageImg, "PNG", 0, 0, pdfWidth, h);
+                    yOffset += srcH;
+                }
+            } else {
+                pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+            }
+
             const name = report.candidate_info?.name || "Candidate";
             const role = report.target_role || "Role";
             pdf.save(`SkillGap_${name}_${role}.pdf`);
@@ -143,6 +193,71 @@ const Results = memo(function Results({ report }) {
                                     <strong>Decision Tree: </strong>
                                     {ml_insights.dt_explanation}
                                 </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Candidate Summary (recruiter-facing) */}
+                {report.ai_candidate_summary && (
+                    <div className="ai-candidate-summary-section">
+                        <h3>AI Candidate Assessment</h3>
+                        <div className="ai-summary-container">
+                            {report.ai_candidate_summary.headline && (
+                                <p className="ai-headline">{report.ai_candidate_summary.headline}</p>
+                            )}
+                            {report.ai_candidate_summary.executive_summary && (
+                                <p className="ai-exec-summary">{report.ai_candidate_summary.executive_summary}</p>
+                            )}
+                            {report.ai_candidate_summary.hiring_recommendation && (
+                                <div className={`hiring-recommendation rec-${report.ai_candidate_summary.hiring_recommendation.toLowerCase().replace(/\s+/g, '-')}`}>
+                                    Recommendation: <strong>{report.ai_candidate_summary.hiring_recommendation}</strong>
+                                </div>
+                            )}
+                            {report.ai_candidate_summary.top_strengths?.length > 0 && (
+                                <div className="ai-strengths-list">
+                                    <h4>Top Strengths</h4>
+                                    <ul>{report.ai_candidate_summary.top_strengths.map((s, i) => <li key={i}>{s}</li>)}</ul>
+                                </div>
+                            )}
+                            {report.ai_candidate_summary.risk_factors?.length > 0 && (
+                                <div className="ai-risks-list">
+                                    <h4>Risk Factors</h4>
+                                    <ul>{report.ai_candidate_summary.risk_factors.map((r, i) => <li key={i}>{r}</li>)}</ul>
+                                </div>
+                            )}
+                            {report.ai_candidate_summary.salary_positioning && (
+                                <p className="salary-note"><strong>Level:</strong> {report.ai_candidate_summary.salary_positioning}</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Culture Fit & Soft Skills */}
+                {report.ai_culture_fit && (
+                    <div className="ai-culture-section">
+                        <h3>Culture & Soft Skills</h3>
+                        <div className="culture-container">
+                            {report.ai_culture_fit.soft_skills?.length > 0 && (
+                                <div className="soft-skills-tags">
+                                    {report.ai_culture_fit.soft_skills.map((s, i) => (
+                                        <span key={i} className="soft-skill-tag">{s}</span>
+                                    ))}
+                                </div>
+                            )}
+                            {report.ai_culture_fit.communication_score && (
+                                <div className="comm-score">
+                                    Communication Score: <strong>{report.ai_culture_fit.communication_score}/10</strong>
+                                </div>
+                            )}
+                            {report.ai_culture_fit.leadership_indicators?.length > 0 && (
+                                <div className="leadership-list">
+                                    <h4>Leadership Indicators</h4>
+                                    <ul>{report.ai_culture_fit.leadership_indicators.map((l, i) => <li key={i}>{l}</li>)}</ul>
+                                </div>
+                            )}
+                            {report.ai_culture_fit.team_fit_notes && (
+                                <p className="team-fit"><strong>Team Fit:</strong> {report.ai_culture_fit.team_fit_notes}</p>
                             )}
                         </div>
                     </div>
