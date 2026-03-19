@@ -33,30 +33,11 @@
       ]
     ]
   },
-  "rf": {
-    "accuracy": 0.9866,
-    "precision": 0.9774,
-    "recall": 0.9954,
-    "f1": 0.9863,
-    "roc_auc": 0.9923,
-    "confusion_matrix": [
-      [
-        1353,
-        30
-      ],
-      [
-        6,
-        1298
-      ]
-    ]
-  },
   "cross_validation": {
     "lr_cv_f1_mean": 0.9724,
     "lr_cv_f1_std": 0.0025,
     "dt_cv_f1_mean": 0.9795,
-    "dt_cv_f1_std": 0.0023,
-    "rf_cv_f1_mean": 0.9824,
-    "rf_cv_f1_std": 0.0016
+    "dt_cv_f1_std": 0.0023
   },
   "train_samples": 10744,
   "test_samples": 2687,

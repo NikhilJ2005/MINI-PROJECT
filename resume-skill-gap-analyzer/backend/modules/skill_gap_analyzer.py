@@ -180,22 +180,30 @@ class SkillGapAnalyzer:
 
         # --- Step 7: Calculate composite ranking score ---
         # Weighted formula combining multiple signals:
-        #   50% required skill coverage (most important)
+        #   45% required skill coverage (most important)
         #   15% nice-to-have coverage
         #   15% ML confidence
-        #   10% GitHub evidence bonus (ratio of "strong" + "demonstrated_only" skills)
-        #   10% verification strength (ratio of "strong" skills among present skills)
+        #   10% GitHub evidence bonus (ratio of demonstrated skills)
+        #   10% verification strength (ratio of "strong" skills)
+        #    5% claim penalty (penalize heavy resume-only claims)
         github_skill_count = len(strengths) + len(hidden_strengths)
         total_present = present_required + present_nice
         github_bonus = min(100.0, (github_skill_count / max(total_required, 1)) * 100)
         strong_ratio = (len(strengths) / max(total_present, 1)) * 100 if total_present > 0 else 0.0
 
+        # Claim penalty: if most skills are resume-only, reduce score
+        claim_penalty_score = 100.0
+        if total_present > 0:
+            unverified_ratio = len(claims_not_proven) / max(total_present, 1)
+            claim_penalty_score = max(0.0, 100.0 - (unverified_ratio * 50.0))
+
         composite_score = round(
-            match_score * 0.50 +
+            match_score * 0.45 +
             nice_to_have_score * 0.15 +
             confidence * 0.15 +
             github_bonus * 0.10 +
-            strong_ratio * 0.10,
+            strong_ratio * 0.10 +
+            claim_penalty_score * 0.05,
             1
         )
 
