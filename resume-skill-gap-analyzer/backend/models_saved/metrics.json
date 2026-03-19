@@ -1,70 +1,75 @@
 {
   "lr": {
-    "accuracy": 0.8993,
-    "precision": 0.8467,
-    "recall": 0.9636,
-    "f1": 0.9014,
-    "roc_auc": 0.9347,
+    "accuracy": 0.9725,
+    "precision": 0.9631,
+    "recall": 0.9808,
+    "f1": 0.9719,
+    "roc_auc": 0.9914,
     "confusion_matrix": [
       [
-        1185,
-        225
+        1334,
+        49
       ],
       [
-        47,
-        1243
+        25,
+        1279
       ]
     ]
   },
   "dt": {
-    "accuracy": 0.8993,
-    "precision": 0.8467,
-    "recall": 0.9636,
-    "f1": 0.9014,
-    "roc_auc": 0.9347,
+    "accuracy": 0.9833,
+    "precision": 0.978,
+    "recall": 0.9877,
+    "f1": 0.9828,
+    "roc_auc": 0.9923,
     "confusion_matrix": [
       [
-        1185,
-        225
+        1354,
+        29
       ],
       [
-        47,
-        1243
+        16,
+        1288
       ]
     ]
   },
   "rf": {
-    "accuracy": 0.8993,
-    "precision": 0.8467,
-    "recall": 0.9636,
-    "f1": 0.9014,
-    "roc_auc": 0.9347,
+    "accuracy": 0.9866,
+    "precision": 0.9774,
+    "recall": 0.9954,
+    "f1": 0.9863,
+    "roc_auc": 0.9923,
     "confusion_matrix": [
       [
-        1185,
-        225
+        1353,
+        30
       ],
       [
-        47,
-        1243
+        6,
+        1298
       ]
     ]
   },
   "cross_validation": {
-    "lr_cv_f1_mean": 0.9013,
-    "lr_cv_f1_std": 0.0047,
-    "dt_cv_f1_mean": 0.9013,
-    "dt_cv_f1_std": 0.0047,
-    "rf_cv_f1_mean": 0.9013,
-    "rf_cv_f1_std": 0.0047
+    "lr_cv_f1_mean": 0.9724,
+    "lr_cv_f1_std": 0.0025,
+    "dt_cv_f1_mean": 0.9795,
+    "dt_cv_f1_std": 0.0023,
+    "rf_cv_f1_mean": 0.9824,
+    "rf_cv_f1_std": 0.0016
   },
-  "train_samples": 10800,
-  "test_samples": 2700,
-  "dataset_source": "HuggingFace (12000 samples) + Synthetic (1500 samples)",
+  "train_samples": 10744,
+  "test_samples": 2687,
+  "dataset_source": "HuggingFace (11931 samples) + Synthetic (1500 samples)",
   "features": [
     "in_resume",
     "in_github",
-    "both_confirmed",
-    "is_required"
+    "is_required",
+    "resume_skill_ratio",
+    "github_skill_ratio",
+    "skill_source_agreement",
+    "resume_claim_density",
+    "github_evidence_strength",
+    "category_match_score"
   ]
 }

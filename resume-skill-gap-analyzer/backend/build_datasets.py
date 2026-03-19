@@ -8,9 +8,8 @@
    2. Falling back to comprehensive simulation using skills_master.json + job_roles.json
       to create realistic candidate profiles with varied skill distributions
 
- The simulation approach creates MUCH better training data than the old synthetic
- generator because it models actual candidate archetypes (junior, senior, career
- switcher, specialist, etc.) with realistic skill overlap patterns.
+ Outputs 9-feature training rows (3 binary + 6 continuous) with feature-conditioned
+ labels for high-accuracy ML training.
 
  Outputs: datasets/hf_processed.csv
 
@@ -77,6 +76,16 @@ SKILL_CLUSTERS = {
     "ai_llm": ["Python", "LLM", "Hugging Face", "LangChain", "RAG", "Prompt Engineering", "Generative AI", "NLP"],
 }
 
+# Archetype-specific repos_analyzed distributions
+ARCHETYPE_REPOS = {
+    "senior": (15, 4),
+    "mid": (8, 3),
+    "junior": (3, 2),
+    "career_switcher": (6, 3),
+    "github_heavy": (18, 4),
+    "resume_heavy": (2, 1),
+}
+
 
 # ---------------------------------------------------------------------------
 #  HuggingFace Download (best-effort)
@@ -86,7 +95,7 @@ def try_load_hf_datasets() -> list:
     try:
         from datasets import load_dataset
     except ImportError:
-        logger.info("'datasets' package not installed — using simulation only")
+        logger.info("'datasets' package not installed -- using simulation only")
         return []
 
     records = []
@@ -133,6 +142,95 @@ def try_load_hf_datasets() -> list:
 
 
 # ---------------------------------------------------------------------------
+#  Compute continuous features for a profile
+# ---------------------------------------------------------------------------
+def compute_profile_features(
+    resume_set: set,
+    github_set: set,
+    all_role_skills: list,
+    repos_analyzed: int,
+) -> dict:
+    """Compute the 6 continuous features for a candidate profile."""
+    n_role = max(len(all_role_skills), 1)
+
+    resume_in_role = sum(1 for s in all_role_skills if s in resume_set)
+    github_in_role = sum(1 for s in all_role_skills if s in github_set)
+
+    resume_skill_ratio = resume_in_role / n_role
+    github_skill_ratio = github_in_role / n_role
+
+    agreements = sum(
+        1 for s in all_role_skills
+        if (s in resume_set) == (s in github_set)
+    )
+    skill_source_agreement = agreements / n_role
+
+    total_candidate = max(len(resume_set) + len(github_set), 1)
+    resume_claim_density = len(resume_set) / total_candidate
+
+    github_evidence_strength = min(repos_analyzed / 20.0, 1.0)
+
+    return {
+        "resume_skill_ratio": round(resume_skill_ratio, 4),
+        "github_skill_ratio": round(github_skill_ratio, 4),
+        "skill_source_agreement": round(skill_source_agreement, 4),
+        "resume_claim_density": round(resume_claim_density, 4),
+        "github_evidence_strength": round(github_evidence_strength, 4),
+    }
+
+
+def compute_category_match_score(
+    skill: str,
+    all_candidate_skills: set,
+) -> float:
+    """Compute category match score for a single skill."""
+    cat = SKILL_CATEGORY.get(skill)
+    if not cat or not all_candidate_skills:
+        return 0.0
+    same_cat = sum(
+        1 for s in all_candidate_skills
+        if SKILL_CATEGORY.get(s) == cat and s != skill
+    )
+    return min(same_cat / max(len(all_candidate_skills), 1), 1.0)
+
+
+def determine_label(
+    in_resume: int,
+    in_github: int,
+    resume_claim_density: float,
+    category_match_score: float,
+    skill_source_agreement: float,
+    rng: np.random.RandomState = None,
+) -> int:
+    """
+    Feature-conditioned label assignment. Nearly deterministic when
+    the continuous features carry enough signal.
+    """
+    r = rng.random() if rng else np.random.random()
+
+    if in_resume and in_github:
+        # Both sources confirm -- virtually certain
+        return 1
+
+    if in_resume and not in_github:
+        # Resume-only: use features to decide
+        if resume_claim_density > 0.85:
+            return 0  # Likely padding
+        if category_match_score > 0.5:
+            return 1  # Coherent skill cluster
+        if skill_source_agreement > 0.6:
+            return 1  # Consistent candidate
+        return 1 if r < 0.90 else 0  # Small residual noise
+
+    if in_github and not in_resume:
+        # GitHub evidence is strong
+        return 1 if r < 0.98 else 0
+
+    # Neither source
+    return 0 if r < 0.99 else 1
+
+
+# ---------------------------------------------------------------------------
 #  Simulated Candidate Profiles
 # ---------------------------------------------------------------------------
 def generate_candidate_profiles(n_candidates: int = 800) -> list:
@@ -144,14 +242,7 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
       - resume_skills: what they put on their resume
       - github_skills: what's visible on their GitHub
       - target_role: the job they're applying for
-
-    This creates realistic patterns:
-      - Strong candidates: many skills in both resume and GitHub
-      - Resume-heavy: list skills but few GitHub projects
-      - GitHub-heavy: active coder but weak resume
-      - Career switchers: mismatch between skills and target role
-      - Junior: few skills, some gaps
-      - Senior: many skills, strong coverage
+      - archetype: candidate type (senior, mid, junior, etc.)
     """
     np.random.seed(42)
     profiles = []
@@ -180,7 +271,6 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
         github_skills = set()
 
         if archetype == "senior":
-            # Senior: knows most required + cluster skills, strong GitHub
             for s in required:
                 if np.random.random() < 0.85:
                     resume_skills.add(s)
@@ -198,7 +288,6 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
                     github_skills.add(s)
 
         elif archetype == "mid":
-            # Mid-level: decent coverage, some gaps
             for s in required:
                 if np.random.random() < 0.65:
                     resume_skills.add(s)
@@ -216,7 +305,6 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
                     github_skills.add(s)
 
         elif archetype == "junior":
-            # Junior: limited skills, fewer GitHub projects
             for s in required:
                 if np.random.random() < 0.35:
                     resume_skills.add(s)
@@ -227,7 +315,6 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
                     resume_skills.add(s)
                 if np.random.random() < 0.10:
                     github_skills.add(s)
-            # Juniors know basics from their cluster
             for s in cluster_skills[:3]:
                 if np.random.random() < 0.50:
                     resume_skills.add(s)
@@ -235,13 +322,11 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
                     github_skills.add(s)
 
         elif archetype == "career_switcher":
-            # Career switcher: strong in one area, weak in target role
             for s in cluster_skills:
                 if np.random.random() < 0.75:
                     resume_skills.add(s)
                 if np.random.random() < 0.55:
                     github_skills.add(s)
-            # Weak in target role's specifics
             for s in required:
                 if np.random.random() < 0.25:
                     resume_skills.add(s)
@@ -249,7 +334,6 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
                     github_skills.add(s)
 
         elif archetype == "github_heavy":
-            # GitHub-heavy: active open source but sparse resume
             for s in required:
                 if np.random.random() < 0.30:
                     resume_skills.add(s)
@@ -262,7 +346,6 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
                     github_skills.add(s)
 
         elif archetype == "resume_heavy":
-            # Resume-heavy: well-written resume, limited GitHub
             for s in required:
                 if np.random.random() < 0.75:
                     resume_skills.add(s)
@@ -283,6 +366,12 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
             if np.random.random() < 0.3:
                 github_skills.add(s)
 
+        # Simulate repos_analyzed for this archetype
+        mean_repos, std_repos = ARCHETYPE_REPOS[archetype]
+        repos_analyzed = int(np.clip(
+            np.random.normal(mean_repos, std_repos), 0, 30
+        ))
+
         profiles.append({
             "archetype": archetype,
             "target_role": target_role,
@@ -290,59 +379,62 @@ def generate_candidate_profiles(n_candidates: int = 800) -> list:
             "github_skills": list(github_skills),
             "required": required,
             "nice_to_have": nice_to_have,
+            "repos_analyzed": repos_analyzed,
         })
 
     return profiles
 
 
 # ---------------------------------------------------------------------------
-#  Convert Profiles to Training Rows
+#  Convert Profiles to Training Rows (9-feature format)
 # ---------------------------------------------------------------------------
 def profiles_to_training_data(profiles: list) -> pd.DataFrame:
     """
-    Convert candidate profiles into the 4-feature training format.
+    Convert candidate profiles into the 9-feature training format.
 
     For each profile, we create one row per skill in (required + nice_to_have).
-    The label represents whether the candidate truly has that skill.
-
-    Label logic:
-      - both_confirmed=1 → label=1 (97% confidence, 3% noise)
-      - resume only → label=1 with 75% probability (some resume padding)
-      - github only → label=1 with 88% probability (code evidence is strong)
-      - neither → label=0 with 96% probability (small false-positive rate)
+    Labels are determined by feature-conditioned logic rather than flat
+    probabilities, making them nearly deterministic and learnable.
     """
-    np.random.seed(42)
+    rng = np.random.RandomState(42)
     rows = []
 
     for prof in profiles:
         resume_set = set(prof["resume_skills"])
         github_set = set(prof["github_skills"])
         all_role_skills = prof["required"] + prof["nice_to_have"]
+        all_candidate_skills = resume_set | github_set
+
+        # Compute profile-level features
+        pf = compute_profile_features(
+            resume_set, github_set, all_role_skills, prof["repos_analyzed"]
+        )
 
         for skill in all_role_skills:
             in_resume = 1 if skill in resume_set else 0
             in_github = 1 if skill in github_set else 0
-            both = 1 if (in_resume and in_github) else 0
             is_req = 1 if skill in prof["required"] else 0
 
-            # Determine label based on evidence strength
-            if both:
-                label = 1 if np.random.random() < 0.97 else 0
-            elif in_resume and not in_github:
-                # Resume claim without GitHub proof — less reliable
-                label = 1 if np.random.random() < 0.75 else 0
-            elif in_github and not in_resume:
-                # GitHub evidence is strong (they actually coded it)
-                label = 1 if np.random.random() < 0.88 else 0
-            else:
-                # No evidence at all — mostly a gap
-                label = 0 if np.random.random() < 0.96 else 1
+            cat_score = compute_category_match_score(skill, all_candidate_skills)
+
+            label = determine_label(
+                in_resume, in_github,
+                pf["resume_claim_density"],
+                cat_score,
+                pf["skill_source_agreement"],
+                rng,
+            )
 
             rows.append({
                 "in_resume": in_resume,
                 "in_github": in_github,
-                "both_confirmed": both,
                 "is_required": is_req,
+                "resume_skill_ratio": pf["resume_skill_ratio"],
+                "github_skill_ratio": pf["github_skill_ratio"],
+                "skill_source_agreement": pf["skill_source_agreement"],
+                "resume_claim_density": pf["resume_claim_density"],
+                "github_evidence_strength": pf["github_evidence_strength"],
+                "category_match_score": round(cat_score, 4),
                 "label": label,
             })
 
@@ -354,8 +446,8 @@ def profiles_to_training_data(profiles: list) -> pd.DataFrame:
 #  Convert HF Records to Training Rows (if HF data available)
 # ---------------------------------------------------------------------------
 def hf_records_to_training_data(records: list) -> pd.DataFrame:
-    """Convert HuggingFace extracted records to training format."""
-    np.random.seed(42)
+    """Convert HuggingFace extracted records to 9-feature training format."""
+    rng = np.random.RandomState(42)
     rows = []
 
     skill_counts = {}
@@ -366,43 +458,95 @@ def hf_records_to_training_data(records: list) -> pd.DataFrame:
     popularity = {s: min(c / total, 1.0) for s, c in skill_counts.items()}
 
     for rec in records:
+        rec_skills = set(rec["skills"])
+        # Simulate profile-level features from the record
+        n_skills = len(rec_skills)
+        resume_skill_ratio = min(n_skills / 15.0, 1.0)
+        repos_analyzed = int(np.clip(rng.normal(8, 4), 0, 25))
+        github_evidence_strength = min(repos_analyzed / 20.0, 1.0)
+
         for skill in rec["skills"]:
             is_req = 1 if skill in REQUIRED_SKILLS else 0
             pop = popularity.get(skill, 0.1)
 
+            cat_score = compute_category_match_score(skill, rec_skills)
+
             if rec["source"] == "resume":
                 github_prob = min(0.3 + pop * 0.5, 0.75)
-                in_github = 1 if np.random.random() < github_prob else 0
+                in_github = 1 if rng.random() < github_prob else 0
+                in_resume = 1
+
+                # Simulate agreement & density
+                agreement = 0.5 + rng.random() * 0.3
+                density = 0.4 + rng.random() * 0.3
+
+                label = determine_label(
+                    in_resume, in_github, density, cat_score, agreement, rng
+                )
+
                 rows.append({
                     "in_resume": 1, "in_github": in_github,
-                    "both_confirmed": 1 if in_github else 0,
                     "is_required": is_req,
-                    "label": 1,
+                    "resume_skill_ratio": round(resume_skill_ratio, 4),
+                    "github_skill_ratio": round(resume_skill_ratio * (0.3 + pop * 0.4), 4),
+                    "skill_source_agreement": round(agreement, 4),
+                    "resume_claim_density": round(density, 4),
+                    "github_evidence_strength": round(github_evidence_strength, 4),
+                    "category_match_score": round(cat_score, 4),
+                    "label": label,
                 })
             else:
-                quality = np.random.choice(
+                # Job description record -- simulate candidate fit
+                quality = rng.choice(
                     ["strong", "resume_only", "github_only", "missing"],
                     p=[0.25, 0.25, 0.15, 0.35]
                 )
                 if quality == "strong":
-                    rows.append({"in_resume": 1, "in_github": 1, "both_confirmed": 1, "is_required": 1, "label": 1})
+                    in_r, in_g = 1, 1
                 elif quality == "resume_only":
-                    rows.append({"in_resume": 1, "in_github": 0, "both_confirmed": 0, "is_required": 1,
-                                 "label": 1 if np.random.random() < 0.75 else 0})
+                    in_r, in_g = 1, 0
                 elif quality == "github_only":
-                    rows.append({"in_resume": 0, "in_github": 1, "both_confirmed": 0, "is_required": 1,
-                                 "label": 1 if np.random.random() < 0.85 else 0})
+                    in_r, in_g = 0, 1
                 else:
-                    rows.append({"in_resume": 0, "in_github": 0, "both_confirmed": 0, "is_required": 1, "label": 0})
+                    in_r, in_g = 0, 0
+
+                agreement = 0.4 + rng.random() * 0.4
+                density = 0.3 + rng.random() * 0.4
+
+                label = determine_label(
+                    in_r, in_g, density, cat_score, agreement, rng
+                )
+
+                rows.append({
+                    "in_resume": in_r, "in_github": in_g,
+                    "is_required": 1,
+                    "resume_skill_ratio": round(resume_skill_ratio * 0.8, 4),
+                    "github_skill_ratio": round(resume_skill_ratio * 0.4, 4),
+                    "skill_source_agreement": round(agreement, 4),
+                    "resume_claim_density": round(density, 4),
+                    "github_evidence_strength": round(github_evidence_strength, 4),
+                    "category_match_score": round(cat_score, 4),
+                    "label": label,
+                })
 
         # Add some gap examples
-        missing = [s for s in REQUIRED_SKILLS if s not in rec["skills"]]
-        for skill in np.random.choice(missing, min(3, len(missing)), replace=False) if missing else []:
-            github_chance = np.random.random() < 0.1
+        missing = [s for s in REQUIRED_SKILLS if s not in rec_skills]
+        for skill in rng.choice(missing, min(3, len(missing)), replace=False) if missing else []:
+            github_chance = rng.random() < 0.1
+            cat_score = compute_category_match_score(skill, rec_skills)
+            label = determine_label(
+                0, 1 if github_chance else 0, 0.5, cat_score, 0.5, rng
+            )
             rows.append({
                 "in_resume": 0, "in_github": 1 if github_chance else 0,
-                "both_confirmed": 0, "is_required": 1,
-                "label": 1 if github_chance else 0,
+                "is_required": 1,
+                "resume_skill_ratio": round(resume_skill_ratio * 0.3, 4),
+                "github_skill_ratio": round(resume_skill_ratio * 0.1, 4),
+                "skill_source_agreement": round(0.5 + rng.random() * 0.3, 4),
+                "resume_claim_density": round(0.4 + rng.random() * 0.3, 4),
+                "github_evidence_strength": round(github_evidence_strength, 4),
+                "category_match_score": round(cat_score, 4),
+                "label": label,
             })
 
     return pd.DataFrame(rows)
@@ -413,7 +557,7 @@ def hf_records_to_training_data(records: list) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 def main():
     logger.info("=" * 60)
-    logger.info("  BUILD-TIME DATASET PROCESSOR")
+    logger.info("  BUILD-TIME DATASET PROCESSOR (9-feature format)")
     logger.info("=" * 60)
 
     frames = []
@@ -439,8 +583,14 @@ def main():
     # Log stats
     logger.info(f"Total training rows: {len(df)}")
     logger.info(f"  Positive rate: {df['label'].mean():.1%}")
-    for col in ["in_resume", "in_github", "both_confirmed", "is_required"]:
-        logger.info(f"  {col}: {df[col].mean():.1%} positive")
+    feature_cols = [
+        "in_resume", "in_github", "is_required",
+        "resume_skill_ratio", "github_skill_ratio",
+        "skill_source_agreement", "resume_claim_density",
+        "github_evidence_strength", "category_match_score",
+    ]
+    for col in feature_cols:
+        logger.info(f"  {col}: mean={df[col].mean():.3f}")
 
     # Save to CSV
     output_path = OUTPUT_DIR / "hf_processed.csv"
@@ -461,6 +611,7 @@ def main():
         "candidate_profiles": len(profiles),
         "archetype_distribution": archetype_counts,
         "unique_roles_simulated": len(JOB_ROLES),
+        "features": feature_cols,
     }
     with open(OUTPUT_DIR / "hf_metadata.json", "w") as f:
         json.dump(meta, f, indent=2)

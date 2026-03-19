@@ -56,8 +56,13 @@ RF_WEIGHT = 0.50
 # Prediction threshold: above this = model says "candidate has skill"
 PREDICTION_THRESHOLD = 0.5
 
-# The 4 features our model uses for each skill
-FEATURE_NAMES = ['in_resume', 'in_github', 'both_confirmed', 'is_required']
+# The 9 features our model uses for each skill (3 binary + 6 continuous)
+FEATURE_NAMES = [
+    'in_resume', 'in_github', 'is_required',
+    'resume_skill_ratio', 'github_skill_ratio',
+    'skill_source_agreement', 'resume_claim_density',
+    'github_evidence_strength', 'category_match_score',
+]
 
 
 class SkillGapMLModel:
@@ -74,7 +79,7 @@ class SkillGapMLModel:
         self.lr_pipeline = Pipeline([
             ('scaler', StandardScaler()),
             ('classifier', LogisticRegression(
-                C=0.5,
+                C=1.0,
                 max_iter=1000,
                 random_state=42,
                 class_weight='balanced',
@@ -82,19 +87,19 @@ class SkillGapMLModel:
             ))
         ])
 
-        # Decision Tree — deeper with finer leaf control
+        # Decision Tree — deeper to leverage 9 features
         self.dt_model = DecisionTreeClassifier(
-            max_depth=8,
+            max_depth=12,
             min_samples_split=8,
             min_samples_leaf=3,
             random_state=42,
             class_weight='balanced'
         )
 
-        # Random Forest — robust ensemble of trees
+        # Random Forest — robust ensemble with more trees for 9 features
         self.rf_model = RandomForestClassifier(
-            n_estimators=100,
-            max_depth=10,
+            n_estimators=200,
+            max_depth=15,
             min_samples_split=5,
             min_samples_leaf=2,
             random_state=42,

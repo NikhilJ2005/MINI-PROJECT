@@ -285,6 +285,8 @@ async def _run_single_analysis(
         demonstrated_skills,
         role_data["required_skills"],
         role_data.get("nice_to_have", []),
+        repos_analyzed=github_result.get("repos_analyzed", 0),
+        skills_master=state.skills_master,
     )
     X, y = state.feature_engineer.encode_for_model(skill_matrix)
 
