@@ -180,15 +180,38 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS — use env var for production, default to permissive for dev
-cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
+# CORS — allow Railway domain + any env-configured origins
+_default_origins = [
+    "https://mini-project-production-b783.up.railway.app",
+    "http://localhost:5173",   # Vite dev server
+    "http://localhost:8000",   # Local backend
+]
+_env_origins = os.getenv("CORS_ORIGINS", "")
+if _env_origins == "*":
+    cors_origins = ["*"]
+elif _env_origins:
+    cors_origins = list(set(_default_origins + _env_origins.split(",")))
+else:
+    cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
+
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    return response
 
 
 # ---------------------------------------------------------------------------
