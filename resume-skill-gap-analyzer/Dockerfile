@@ -4,6 +4,8 @@ WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ .
+# Ensure production build uses empty base URL (same-origin API calls)
+ENV VITE_API_BASE_URL=""
 RUN npm run build
 
 # Stage 2: Python backend + serve frontend static files
