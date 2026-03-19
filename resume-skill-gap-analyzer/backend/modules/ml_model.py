@@ -46,18 +46,19 @@ from sklearn.tree import DecisionTreeClassifier
 # ---------------------------------------------------------------------
 # Ensemble weights: LR provides calibrated probabilities,
 # DT adds explainability with tree-based splits
-LR_WEIGHT = 0.55
-DT_WEIGHT = 0.45
+LR_WEIGHT = 0.45
+DT_WEIGHT = 0.55
 
 # Prediction threshold: above this = model says "candidate has skill"
 PREDICTION_THRESHOLD = 0.5
 
-# The 9 features our model uses for each skill (3 binary + 6 continuous)
+# The 11 features our model uses for each skill (3 binary + 8 continuous)
 FEATURE_NAMES = [
     'in_resume', 'in_github', 'is_required',
     'resume_skill_ratio', 'github_skill_ratio',
     'skill_source_agreement', 'resume_claim_density',
     'github_evidence_strength', 'category_match_score',
+    'skill_rarity_score', 'profile_consistency_score',
 ]
 
 
@@ -75,19 +76,19 @@ class SkillGapMLModel:
         self.lr_pipeline = Pipeline([
             ('scaler', StandardScaler()),
             ('classifier', LogisticRegression(
-                C=1.0,
-                max_iter=1000,
+                C=2.0,
+                max_iter=2000,
                 random_state=42,
                 class_weight='balanced',
                 solver='lbfgs'
             ))
         ])
 
-        # Decision Tree — deep enough to leverage 9 features
+        # Decision Tree — deep enough to leverage 11 features
         self.dt_model = DecisionTreeClassifier(
-            max_depth=12,
-            min_samples_split=8,
-            min_samples_leaf=3,
+            max_depth=15,
+            min_samples_split=5,
+            min_samples_leaf=2,
             random_state=42,
             class_weight='balanced'
         )
@@ -260,7 +261,7 @@ class SkillGapMLModel:
     def get_feature_importance(self) -> Dict:
         """
         Feature importance from both models.
-        Shows which of the 9 features matter most for predictions.
+        Shows which of the 11 features matter most for predictions.
         """
         if not self.is_trained:
             return {}
@@ -301,16 +302,17 @@ class SkillGapMLModel:
             "lr_explanation": (
                 "Logistic Regression calculates the probability "
                 "a skill is genuinely present (0% to 100%) based "
-                "on resume claims, GitHub evidence, and 6 continuous "
-                "profile-level signals. It outputs a calibrated "
-                "confidence score via StandardScaler normalization."
+                "on resume claims, GitHub evidence, and 8 continuous "
+                "profile-level signals including skill rarity and "
+                "profile consistency. Outputs a calibrated confidence "
+                "score via StandardScaler normalization."
             ),
             "dt_explanation": (
                 "Decision Tree builds IF/THEN rules from data using "
-                "9 features. Example: IF skill in GitHub AND "
-                "category_match_score > 0.5 THEN confidence=97%. "
-                "Fully explainable -- you can trace exactly why "
-                "each decision was made."
+                "11 features. Example: IF skill in GitHub AND "
+                "category_match_score > 0.5 AND profile_consistency > 0.4 "
+                "THEN confidence=99%. Fully explainable -- you can "
+                "trace exactly why each decision was made."
             ),
             "ensemble_explanation": (
                 f"Final score = {int(LR_WEIGHT*100)}% LR + "

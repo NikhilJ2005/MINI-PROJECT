@@ -28,12 +28,13 @@ import pandas as pd
 from loguru import logger
 
 
-# The 9 features used by the ML model
+# The 11 features used by the ML model (3 binary + 8 continuous)
 FEATURE_NAMES = [
     "in_resume", "in_github", "is_required",
     "resume_skill_ratio", "github_skill_ratio",
     "skill_source_agreement", "resume_claim_density",
     "github_evidence_strength", "category_match_score",
+    "skill_rarity_score", "profile_consistency_score",
 ]
 
 
@@ -60,7 +61,7 @@ class FeatureEngineer:
         Create a skill-by-skill matrix used for ML prediction and analysis.
 
         Each row represents one skill from the target role's requirements.
-        Includes 9 features: 3 binary + 6 continuous profile/skill-level signals.
+        Includes 11 features: 3 binary + 8 continuous profile/skill-level signals.
         """
         claimed_set = set(claimed_skills)
         demonstrated_set = set(demonstrated_skills)
@@ -98,6 +99,31 @@ class FeatureEngineer:
         # All candidate skills (from either source)
         all_candidate_skills = claimed_set | demonstrated_set
 
+        # Profile consistency: how many of the candidate's skills share
+        # categories with each other (high = focused profile, low = scattered)
+        if all_candidate_skills and skill_to_cat:
+            candidate_cats = [skill_to_cat.get(s) for s in all_candidate_skills if skill_to_cat.get(s)]
+            if candidate_cats:
+                from collections import Counter
+                cat_counts = Counter(candidate_cats)
+                largest_cluster = cat_counts.most_common(1)[0][1] if cat_counts else 0
+                profile_consistency_score = min(largest_cluster / max(len(all_candidate_skills), 1), 1.0)
+            else:
+                profile_consistency_score = 0.0
+        else:
+            profile_consistency_score = 0.0
+
+        # Skill rarity: count how many roles require each skill (rare = fewer roles)
+        all_role_skill_counts: Dict[str, int] = {}
+        # We don't have job_roles_data here, so approximate rarity from skills_master
+        # Skills in fewer categories are more specialized/rare
+        skill_cat_count: Dict[str, int] = {}
+        if skills_master:
+            for cat, cat_skills in skills_master.items():
+                for s in cat_skills:
+                    skill_cat_count[s] = skill_cat_count.get(s, 0) + 1
+        total_categories = max(len(skills_master), 1) if skills_master else 1
+
         rows = []
         for skill in all_role_skills:
             in_resume = 1 if skill in claimed_set else 0
@@ -115,6 +141,10 @@ class FeatureEngineer:
             else:
                 cat_score = 0.0
 
+            # Skill rarity: 1.0 = very rare (only in 1 category), 0.0 = very common
+            n_cats = skill_cat_count.get(skill, 1)
+            skill_rarity = 1.0 - min(n_cats / total_categories, 1.0)
+
             rows.append({
                 "skill_name": skill,
                 "category": "required" if is_req else "nice_to_have",
@@ -129,11 +159,13 @@ class FeatureEngineer:
                 "resume_claim_density": round(resume_claim_density, 4),
                 "github_evidence_strength": round(github_evidence_strength, 4),
                 "category_match_score": round(cat_score, 4),
+                "skill_rarity_score": round(skill_rarity, 4),
+                "profile_consistency_score": round(profile_consistency_score, 4),
             })
 
         df = pd.DataFrame(rows)
         logger.debug(f"[FeatureEngineer] Created skill matrix with {len(df)} skills "
-                     f"(9 features per skill).")
+                     f"(11 features per skill).")
         return df
 
     # -----------------------------------------------------------------
@@ -154,5 +186,5 @@ class FeatureEngineer:
         # Label: whether the skill is "present" (found in at least one source)
         y = skill_matrix["combined"].copy()
 
-        logger.debug(f"[FeatureEngineer] Encoded {len(X)} samples for model (9 features).")
+        logger.debug(f"[FeatureEngineer] Encoded {len(X)} samples for model (11 features).")
         return X, y
