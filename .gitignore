@@ -1,5 +1,3 @@
-# Saved ML models
-resume-skill-gap-analyzer/backend/models_saved/
 # HuggingFace cache
 resume-skill-gap-analyzer/backend/datasets/
 # Python
