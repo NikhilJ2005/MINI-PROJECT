@@ -2,10 +2,9 @@
 =============================================================================
  ML Model — Logistic Regression + Decision Tree Ensemble
 =============================================================================
- Two models working together:
-   Logistic Regression → outputs probability 0-1 (confidence score)
+ Two models working together for accuracy and explainability:
+   Logistic Regression → calibrated probability scores (0-1)
    Decision Tree       → explainable IF/THEN rules
-   Ensemble            → weighted average of both (more robust)
 
  Training pipeline:
    1. Split data 80/20 (stratified to preserve class balance)
@@ -27,7 +26,6 @@ from loguru import logger
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
-    classification_report,
     confusion_matrix,
     f1_score,
     precision_score,
@@ -43,19 +41,25 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
-# ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------
 #  Constants
-# ─────────────────────────────────────────────────────────────────────
-# Ensemble weights: LR gets slightly more weight because it outputs
-# calibrated probabilities; DT is better at capturing edge cases
-LR_WEIGHT = 0.55
-DT_WEIGHT = 0.45
+# ---------------------------------------------------------------------
+# Ensemble weights: LR provides calibrated probabilities,
+# DT adds explainability with tree-based splits
+LR_WEIGHT = 0.45
+DT_WEIGHT = 0.55
 
 # Prediction threshold: above this = model says "candidate has skill"
 PREDICTION_THRESHOLD = 0.5
 
-# The 4 features our model uses for each skill
-FEATURE_NAMES = ['in_resume', 'in_github', 'both_confirmed', 'is_required']
+# The 11 features our model uses for each skill (3 binary + 8 continuous)
+FEATURE_NAMES = [
+    'in_resume', 'in_github', 'is_required',
+    'resume_skill_ratio', 'github_skill_ratio',
+    'skill_source_agreement', 'resume_claim_density',
+    'github_evidence_strength', 'category_match_score',
+    'skill_rarity_score', 'profile_consistency_score',
+]
 
 
 class SkillGapMLModel:
@@ -66,26 +70,25 @@ class SkillGapMLModel:
     def __init__(self) -> None:
         """
         Initialize both models with optimized hyperparameters.
-        class_weight='balanced' is critical — skill datasets are
-        imbalanced (more gaps than strong matches in reality).
+        class_weight='balanced' handles imbalanced skill datasets.
         """
-        # Logistic Regression inside a Pipeline with StandardScaler
+        # Logistic Regression with StandardScaler for continuous features
         self.lr_pipeline = Pipeline([
             ('scaler', StandardScaler()),
             ('classifier', LogisticRegression(
-                C=1.0,
-                max_iter=1000,
+                C=2.0,
+                max_iter=2000,
                 random_state=42,
                 class_weight='balanced',
                 solver='lbfgs'
             ))
         ])
 
-        # Decision Tree — no scaler needed, tree-based
+        # Decision Tree — deep enough to leverage 11 features
         self.dt_model = DecisionTreeClassifier(
-            max_depth=5,
-            min_samples_split=10,
-            min_samples_leaf=4,
+            max_depth=15,
+            min_samples_split=5,
+            min_samples_leaf=2,
             random_state=42,
             class_weight='balanced'
         )
@@ -100,7 +103,7 @@ class SkillGapMLModel:
         self.lr_accuracy: float = 0.0
         self.dt_accuracy: float = 0.0
 
-        logger.info("[MLModel] Initialized Logistic Regression + Decision Tree models.")
+        logger.info("[MLModel] Initialized LR + DT ensemble.")
 
     # =================================================================
     #  TRAINING
@@ -206,11 +209,11 @@ class SkillGapMLModel:
         """
         Run both models and return ensemble predictions.
 
-        Ensemble = LR_WEIGHT * LR_probability + DT_WEIGHT * DT_probability
-        If ensemble probability > PREDICTION_THRESHOLD → "has skill"
+        Ensemble = LR_WEIGHT * LR + DT_WEIGHT * DT
+        If ensemble probability > PREDICTION_THRESHOLD -> "has skill"
         """
         if not self.is_trained:
-            logger.warning("[MLModel] Models not trained yet — returning default predictions")
+            logger.warning("[MLModel] Models not trained yet -- returning default predictions")
             n = len(X)
             return {
                 "lr_predictions": [0] * n,
@@ -231,7 +234,10 @@ class SkillGapMLModel:
         dt_proba = self.dt_model.predict_proba(X)[:, 1]
 
         # Ensemble: weighted average of both models
-        ensemble_proba = (LR_WEIGHT * lr_proba) + (DT_WEIGHT * dt_proba)
+        ensemble_proba = (
+            LR_WEIGHT * lr_proba +
+            DT_WEIGHT * dt_proba
+        )
 
         # Round probabilities for cleaner output
         lr_probs_rounded = [round(float(p), 4) for p in lr_proba]
@@ -254,8 +260,8 @@ class SkillGapMLModel:
     # =================================================================
     def get_feature_importance(self) -> Dict:
         """
-        Feature importance from DT and coefficient magnitude from LR.
-        Shows which of the 4 features matter most for predictions.
+        Feature importance from both models.
+        Shows which of the 11 features matter most for predictions.
         """
         if not self.is_trained:
             return {}
@@ -274,9 +280,8 @@ class SkillGapMLModel:
             'dt_importance': dt_imp,
             'lr_coefficients': lr_coefs,
             'explanation': (
-                "DT importance: how often each feature is used "
-                "to split the tree. LR coefficients: how much "
-                "each feature moves the probability."
+                "DT importance: how often each feature splits the tree. "
+                "LR coefficients: how much each feature moves the probability."
             )
         }
 
@@ -297,22 +302,28 @@ class SkillGapMLModel:
             "lr_explanation": (
                 "Logistic Regression calculates the probability "
                 "a skill is genuinely present (0% to 100%) based "
-                "on resume claims and GitHub evidence. It outputs "
-                "a calibrated confidence score."
+                "on resume claims, GitHub evidence, and 8 continuous "
+                "profile-level signals including skill rarity and "
+                "profile consistency. Outputs a calibrated confidence "
+                "score via StandardScaler normalization."
             ),
             "dt_explanation": (
-                "Decision Tree builds IF/THEN rules from data. "
-                "Example: IF skill in GitHub AND resume THEN "
-                "confidence=95%. Fully explainable — you can "
+                "Decision Tree builds IF/THEN rules from data using "
+                "11 features. Example: IF skill in GitHub AND "
+                "category_match_score > 0.5 AND profile_consistency > 0.4 "
+                "THEN confidence=99%. Fully explainable -- you can "
                 "trace exactly why each decision was made."
             ),
             "ensemble_explanation": (
-                f"Final score = {int(LR_WEIGHT*100)}% LR + {int(DT_WEIGHT*100)}% DT. "
-                "Combining both models reduces individual errors "
-                "and gives more reliable predictions."
+                f"Final score = {int(LR_WEIGHT*100)}% LR + "
+                f"{int(DT_WEIGHT*100)}% DT. "
+                "LR provides calibrated probabilities while DT "
+                "captures non-linear feature interactions. Together "
+                "they reduce individual errors."
             ),
             "training_explanation": (
-                "Both models were trained on curated skill assessment data. "
+                "Models trained on real HuggingFace resume/job datasets + "
+                "synthetic augmentation for comprehensive coverage. "
                 f"Features used: {', '.join(self.FEATURE_NAMES)}. "
                 "class_weight='balanced' handles imbalanced datasets. "
                 "Cross-validation ensures honest accuracy reporting."
@@ -330,9 +341,9 @@ class SkillGapMLModel:
         dt = self.metrics.get('dt', {})
         cv = self.metrics.get('cross_validation', {})
 
-        logger.info("=" * 50)
-        logger.info("       ML MODEL TRAINING COMPLETE")
-        logger.info("=" * 50)
+        logger.info("=" * 60)
+        logger.info("          ML MODEL TRAINING COMPLETE")
+        logger.info("=" * 60)
         logger.info(
             f"  Logistic Regression | "
             f"Acc: {lr.get('accuracy', 0):.1%} | "
@@ -358,7 +369,7 @@ class SkillGapMLModel:
             f"Samples: {self.metrics.get('train_samples', 0)} train "
             f"/ {self.metrics.get('test_samples', 0)} test"
         )
-        logger.info("=" * 50)
+        logger.info("=" * 60)
 
     # =================================================================
     #  SAVE / LOAD MODELS
@@ -388,7 +399,7 @@ class SkillGapMLModel:
             metrics_path = self.model_save_path / "metrics.json"
 
             if not (lr_path.exists() and dt_path.exists()):
-                logger.info("No saved models found — will train fresh")
+                logger.info("No saved models found -- will train fresh")
                 return False
 
             self.lr_pipeline = joblib.load(lr_path)

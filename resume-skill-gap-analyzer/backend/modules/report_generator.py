@@ -49,12 +49,16 @@ class ReportGenerator:
         Returns:
             A label string.
         """
-        if score >= 75:
+        if score >= 90:
             return "Excellent"
-        elif score >= 50:
+        elif score >= 75:
+            return "Strong"
+        elif score >= 60:
             return "Good"
-        elif score >= 25:
+        elif score >= 40:
             return "Fair"
+        elif score >= 20:
+            return "Weak"
         else:
             return "Poor"
 
@@ -64,7 +68,7 @@ class ReportGenerator:
     @staticmethod
     def _get_confidence_rating(confidence: float) -> str:
         """
-        Convert a confidence score to a qualitative rating.
+        Convert a confidence score to a qualitative rating with 6 granular bins.
 
         Args:
             confidence: The confidence percentage (0-100).
@@ -72,14 +76,18 @@ class ReportGenerator:
         Returns:
             A rating string.
         """
-        if confidence >= 80:
-            return "High — ML model is very confident in skill assessments"
+        if confidence >= 90:
+            return "Very High -- ML model is highly confident in all skill assessments"
+        elif confidence >= 75:
+            return "High -- strong confidence, most skills well-evidenced"
         elif confidence >= 60:
-            return "Medium — reasonable confidence, some skills need verification"
-        elif confidence >= 40:
-            return "Low — limited evidence for many skills"
+            return "Medium-High -- good confidence, a few skills need verification"
+        elif confidence >= 45:
+            return "Medium -- moderate confidence, several skills lack strong evidence"
+        elif confidence >= 30:
+            return "Low -- limited evidence for many skills, verification recommended"
         else:
-            return "Very Low — insufficient data for reliable assessment"
+            return "Very Low -- insufficient data for reliable assessment"
 
     # -----------------------------------------------------------------
     #  Resource Hint Helper
@@ -172,23 +180,39 @@ class ReportGenerator:
         }
 
         # --- Recommendations ---
-        # Generate actionable recommendations for each missing required skill
+        # Generate actionable recommendations with urgency levels
         recommendations = []
+
+        # High-demand skills get "Urgent" priority, others get "Critical"
+        high_demand_skills = {
+            "Python", "JavaScript", "TypeScript", "React", "Node.js", "Docker",
+            "Kubernetes", "AWS", "GCP", "Azure", "SQL", "Git", "CI/CD",
+            "Machine Learning", "REST API", "TensorFlow", "PyTorch",
+            "Go", "Rust", "Java", "GraphQL", "Terraform",
+            "LLM", "Generative AI", "RAG", "LangChain",
+        }
+
         for skill in analysis_result["missing_required"]:
+            is_high_demand = skill in high_demand_skills
             recommendations.append({
                 "skill": skill,
-                "priority": "Critical",
-                "action": f"Learn {skill} — required for {target_role}",
+                "priority": "Urgent" if is_high_demand else "Critical",
+                "action": f"Learn {skill} -- required for {target_role}",
                 "resource_hint": self._get_resource_hint(skill),
+                "market_demand": "high" if is_high_demand else "standard",
             })
+
+        # Sort: Urgent first, then Critical
+        recommendations.sort(key=lambda r: 0 if r["priority"] == "Urgent" else 1)
 
         # Also add recommendations for missing nice-to-have skills (lower priority)
         for skill in analysis_result["missing_nice_to_have"]:
             recommendations.append({
                 "skill": skill,
                 "priority": "Recommended",
-                "action": f"Consider learning {skill} — nice to have for {target_role}",
+                "action": f"Consider learning {skill} -- nice to have for {target_role}",
                 "resource_hint": self._get_resource_hint(skill),
+                "market_demand": "high" if skill in high_demand_skills else "standard",
             })
 
         # --- ML Insights ---
@@ -200,6 +224,7 @@ class ReportGenerator:
             "model_explanation": model_summary.get("training_explanation", ""),
             "lr_explanation": model_summary.get("lr_explanation", ""),
             "dt_explanation": model_summary.get("dt_explanation", ""),
+            "ensemble_explanation": model_summary.get("ensemble_explanation", ""),
         }
 
         # --- GitHub Insights ---

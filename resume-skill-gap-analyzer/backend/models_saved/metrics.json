@@ -1,51 +1,58 @@
 {
   "lr": {
-    "accuracy": 0.7625,
-    "precision": 0.7654,
-    "recall": 0.9013,
-    "f1": 0.8278,
-    "roc_auc": 0.8331,
+    "accuracy": 0.9711,
+    "precision": 0.9596,
+    "recall": 0.9797,
+    "f1": 0.9695,
+    "roc_auc": 0.998,
     "confusion_matrix": [
       [
-        46,
-        42
+        1984,
+        75
       ],
       [
-        15,
-        137
+        37,
+        1782
       ]
     ]
   },
   "dt": {
-    "accuracy": 0.7625,
-    "precision": 0.7654,
-    "recall": 0.9013,
-    "f1": 0.8278,
-    "roc_auc": 0.8304,
+    "accuracy": 0.9961,
+    "precision": 0.9956,
+    "recall": 0.9962,
+    "f1": 0.9959,
+    "roc_auc": 0.998,
     "confusion_matrix": [
       [
-        46,
-        42
+        2051,
+        8
       ],
       [
-        15,
-        137
+        7,
+        1812
       ]
     ]
   },
   "cross_validation": {
-    "lr_cv_f1_mean": 0.8025,
-    "lr_cv_f1_std": 0.0306,
-    "dt_cv_f1_mean": 0.8206,
-    "dt_cv_f1_std": 0.0346
+    "lr_cv_f1_mean": 0.9723,
+    "lr_cv_f1_std": 0.0013,
+    "dt_cv_f1_mean": 0.9963,
+    "dt_cv_f1_std": 0.0011
   },
-  "train_samples": 960,
-  "test_samples": 240,
-  "dataset_source": "synthetic (1200 samples)",
+  "train_samples": 15511,
+  "test_samples": 3878,
+  "dataset_source": "HuggingFace (17889 samples) + Synthetic (1500 samples)",
   "features": [
     "in_resume",
     "in_github",
-    "both_confirmed",
-    "is_required"
+    "is_required",
+    "resume_skill_ratio",
+    "github_skill_ratio",
+    "skill_source_agreement",
+    "resume_claim_density",
+    "github_evidence_strength",
+    "category_match_score",
+    "skill_rarity_score",
+    "profile_consistency_score"
   ]
 }

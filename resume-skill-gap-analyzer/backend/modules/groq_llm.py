@@ -15,9 +15,12 @@
    - Job description skill extraction
    - Batch executive summary for recruiters
    - Culture fit & soft skills analysis
+   - Skill credibility scoring (validates resume-only claims)
+   - Role-fit narrative (detailed fit analysis)
    - Retry logic with exponential backoff
-   - In-memory LRU response cache
+   - In-memory LRU response cache with SHA256 keys
    - Model fallback chain
+   - Response schema validation
 =============================================================================
 """
 
@@ -26,15 +29,15 @@ import json
 import os
 import time
 from collections import OrderedDict
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-# Groq client — initialized lazily
+# Groq client -- initialized lazily
 _client = None
 _available = False
 
-# Model fallback chain — try primary first, then fallbacks
+# Model fallback chain -- try primary first, then fallbacks
 MODELS = [
     "meta-llama/llama-4-scout-17b-16e-instruct",
     "llama-3.3-70b-versatile",
@@ -75,9 +78,9 @@ def is_available() -> bool:
 
 
 def _cache_key(system_prompt: str, user_prompt: str) -> str:
-    """Generate a cache key from prompts."""
+    """Generate a cache key from prompts using SHA256."""
     content = f"{system_prompt}||{user_prompt}"
-    return hashlib.md5(content.encode()).hexdigest()
+    return hashlib.sha256(content.encode()).hexdigest()
 
 
 def _cache_get(key: str) -> Optional[str]:
@@ -99,6 +102,13 @@ def _cache_set(key: str, value: str):
         _cache.popitem(last=False)
 
 
+def _validate_response(data: Any, required_keys: List[str]) -> bool:
+    """Validate that the parsed JSON response contains expected keys."""
+    if not isinstance(data, dict):
+        return False
+    return all(k in data for k in required_keys)
+
+
 def _llm_call(
     system_prompt: str,
     user_prompt: str,
@@ -112,7 +122,7 @@ def _llm_call(
 
     Retries: 3 attempts with 1s, 2s, 4s backoff on transient errors.
     Fallback: Tries each model in MODELS list before giving up.
-    Cache: In-memory LRU cache with 1-hour TTL.
+    Cache: In-memory LRU cache with 1-hour TTL using SHA256 keys.
     """
     client = _get_client()
     if not client:
@@ -201,9 +211,14 @@ def extract_skills_with_llm(resume_text: str, known_skills: List[str]) -> List[s
 
     try:
         data = json.loads(result)
+        if not _validate_response(data, ["skills"]):
+            logger.warning("[GroqLLM] Skill extraction response missing 'skills' key")
+            return []
         llm_skills = data.get("skills", [])
+        if not isinstance(llm_skills, list):
+            return []
         # Return only skills not already found by regex
-        new_skills = [s for s in llm_skills if s not in known_skills]
+        new_skills = [s for s in llm_skills if isinstance(s, str) and s not in known_skills]
         logger.info(f"[GroqLLM] Extracted {len(new_skills)} additional skills via LLM")
         return new_skills
     except (json.JSONDecodeError, KeyError):
@@ -224,7 +239,7 @@ def generate_ai_feedback(
 ) -> Optional[Dict]:
     """
     Generate personalized AI resume coaching feedback.
-    Returns dict with resume_tips, bullet_suggestions, and overall_advice.
+    Returns dict with resume_tips, bullet_suggestions, overall_advice, keyword_suggestions.
     """
     if not is_available():
         return None
@@ -236,7 +251,8 @@ def generate_ai_feedback(
         "'resume_tips' (array of 3-5 specific improvement tips), "
         "'bullet_suggestions' (array of 2-3 bullet points the candidate could add to strengthen gaps), "
         "'overall_advice' (a brief 2-3 sentence encouraging summary), "
-        "'keyword_suggestions' (array of 5-8 keywords to add for ATS optimization)."
+        "'keyword_suggestions' (array of 5-8 keywords to add for ATS optimization), "
+        "'formatting_tips' (array of 2-3 resume formatting improvements)."
     )
     user_prompt = (
         f"Target Role: {target_role}\n"
@@ -252,6 +268,9 @@ def generate_ai_feedback(
 
     try:
         data = json.loads(result)
+        if not _validate_response(data, ["resume_tips", "overall_advice"]):
+            logger.warning("[GroqLLM] AI feedback response missing required keys")
+            return None
         logger.info("[GroqLLM] Generated AI resume feedback")
         return data
     except json.JSONDecodeError:
@@ -271,7 +290,7 @@ def generate_interview_questions(
 ) -> Optional[List[Dict]]:
     """
     Generate likely interview questions based on the candidate's profile.
-    Returns list of {question, skill, difficulty, prep_hint}.
+    Returns list of {question, skill, difficulty, prep_hint, why_asked}.
     """
     if not is_available():
         return None
@@ -284,7 +303,8 @@ def generate_interview_questions(
         "'question' (the interview question), "
         "'skill' (the skill being tested), "
         "'difficulty' ('easy'/'medium'/'hard'), "
-        "'prep_hint' (brief hint on how to prepare for this question)."
+        "'prep_hint' (brief hint on how to prepare for this question), "
+        "'why_asked' (brief explanation of why this question is important for the role)."
     )
     user_prompt = (
         f"Target Role: {target_role}\n"
@@ -300,7 +320,12 @@ def generate_interview_questions(
 
     try:
         data = json.loads(result)
+        if not _validate_response(data, ["questions"]):
+            logger.warning("[GroqLLM] Interview questions response missing 'questions' key")
+            return None
         questions = data.get("questions", [])
+        if not isinstance(questions, list):
+            return None
         logger.info(f"[GroqLLM] Generated {len(questions)} interview questions")
         return questions
     except json.JSONDecodeError:
@@ -319,7 +344,7 @@ def generate_learning_path(
 ) -> Optional[List[Dict]]:
     """
     Generate a personalized learning path with specific resources.
-    Returns list of {skill, week, resources, project_idea}.
+    Returns list of {skill, week, resources, project_idea, prerequisites}.
     """
     if not is_available():
         return None
@@ -331,8 +356,10 @@ def generate_learning_path(
         "'skill' (skill to learn), "
         "'week' (suggested week number, 1-8), "
         "'resources' (array of 2-3 learning resources, each as an object with 'name' (resource title/description) "
-        "and 'url' (the actual URL — only include a URL if you are confident it is correct, otherwise omit the url field)), "
-        "'project_idea' (a specific mini-project to demonstrate this skill)."
+        "and 'url' (the actual URL -- only include a URL if you are confident it is correct, otherwise omit the url field)), "
+        "'project_idea' (a specific mini-project to demonstrate this skill), "
+        "'prerequisites' (array of skills that should be learned first, can be empty), "
+        "'estimated_hours' (estimated hours to reach basic competency, as integer)."
     )
     user_prompt = (
         f"Target Role: {target_role}\n"
@@ -347,11 +374,140 @@ def generate_learning_path(
 
     try:
         data = json.loads(result)
+        if not _validate_response(data, ["learning_path"]):
+            logger.warning("[GroqLLM] Learning path response missing 'learning_path' key")
+            return None
         path = data.get("learning_path", [])
+        if not isinstance(path, list):
+            return None
         logger.info(f"[GroqLLM] Generated learning path with {len(path)} items")
         return path
     except json.JSONDecodeError:
         logger.warning("[GroqLLM] Failed to parse learning path response")
+        return None
+
+
+# =========================================================================
+#  Skill Credibility Scoring (NEW)
+# =========================================================================
+
+def generate_skill_credibility_assessment(
+    resume_text: str,
+    claimed_skills: List[str],
+    demonstrated_skills: List[str],
+    claims_not_proven: List[str],
+) -> Optional[Dict]:
+    """
+    Use LLM to assess the credibility of resume-only skill claims by
+    analyzing context clues in the resume text.
+
+    Returns dict with per-skill credibility scores and overall assessment.
+    """
+    if not is_available():
+        return None
+
+    if not claims_not_proven:
+        return None
+
+    system_prompt = (
+        "You are a senior technical recruiter specializing in skill verification. "
+        "Analyze the resume text to assess how credible each unverified skill claim is. "
+        "Look for contextual evidence: project descriptions, experience duration, "
+        "specific version numbers, concrete accomplishments, and related skill clusters. "
+        "Return a JSON object with keys: "
+        "'skill_scores' (object mapping each skill name to an object with: "
+        "  'credibility' (0.0-1.0 score), "
+        "  'evidence' (brief text explaining why you gave that score), "
+        "  'recommendation' ('accept'/'verify'/'skeptical')), "
+        "'overall_resume_credibility' (0.0-1.0 overall credibility score), "
+        "'credibility_summary' (1-2 sentence summary of overall credibility assessment)."
+    )
+    user_prompt = (
+        f"Skills confirmed on GitHub: {', '.join(demonstrated_skills[:15])}\n"
+        f"Skills ONLY on resume (unverified): {', '.join(claims_not_proven[:12])}\n"
+        f"Resume text:\n{resume_text[:3500]}"
+    )
+
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000, temperature=0.2)
+    if not result:
+        return None
+
+    try:
+        data = json.loads(result)
+        if not _validate_response(data, ["skill_scores"]):
+            logger.warning("[GroqLLM] Skill credibility response missing required keys")
+            return None
+        logger.info(f"[GroqLLM] Generated skill credibility assessment for {len(claims_not_proven)} skills")
+        return data
+    except json.JSONDecodeError:
+        logger.warning("[GroqLLM] Failed to parse skill credibility response")
+        return None
+
+
+# =========================================================================
+#  Role-Fit Narrative (NEW)
+# =========================================================================
+
+def generate_role_fit_narrative(
+    target_role: str,
+    match_score: float,
+    strengths: List[str],
+    missing_skills: List[str],
+    claims_not_proven: List[str],
+    hidden_strengths: List[str],
+    github_insights: Dict = None,
+) -> Optional[Dict]:
+    """
+    Generate a detailed role-fit narrative that explains WHY the candidate
+    is or isn't a good fit, beyond just listing skills.
+
+    Returns dict with narrative sections for different audiences.
+    """
+    if not is_available():
+        return None
+
+    github_context = ""
+    if github_insights:
+        repos = github_insights.get("repos_analyzed", 0)
+        langs = [l.get("language", "") for l in github_insights.get("top_languages", [])]
+        github_context = f"\nGitHub: {repos} repos, top languages: {', '.join(langs)}"
+
+    system_prompt = (
+        "You are a talent analytics specialist. Write a comprehensive role-fit narrative "
+        "that explains the candidate's fit for the role in detail. Go beyond listing skills -- "
+        "analyze patterns, identify strengths, and explain gaps in context. "
+        "Return a JSON object with keys: "
+        "'fit_score_explanation' (2-3 sentences explaining what the match score means in practice), "
+        "'strengths_narrative' (paragraph highlighting why the candidate's strengths matter for this role), "
+        "'gaps_narrative' (paragraph explaining the significance of missing skills and how critical each gap is), "
+        "'growth_potential' ('High'/'Medium'/'Low' with 1 sentence justification), "
+        "'team_role_suggestion' (what specific team role/responsibilities would suit this candidate), "
+        "'comparison_to_ideal' (how this candidate compares to an ideal hire for this role, 2-3 sentences), "
+        "'next_steps' (array of 2-3 concrete next steps for the hiring process)."
+    )
+    user_prompt = (
+        f"Target Role: {target_role}\n"
+        f"Match Score: {match_score}%\n"
+        f"Verified Strengths (resume + GitHub): {', '.join(strengths[:10])}\n"
+        f"Unverified Claims (resume only): {', '.join(claims_not_proven[:8])}\n"
+        f"Hidden Strengths (GitHub only): {', '.join(hidden_strengths[:5])}\n"
+        f"Missing Critical Skills: {', '.join(missing_skills[:8])}"
+        f"{github_context}"
+    )
+
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000, temperature=0.3)
+    if not result:
+        return None
+
+    try:
+        data = json.loads(result)
+        if not _validate_response(data, ["fit_score_explanation", "strengths_narrative"]):
+            logger.warning("[GroqLLM] Role-fit narrative response missing required keys")
+            return None
+        logger.info("[GroqLLM] Generated role-fit narrative")
+        return data
+    except json.JSONDecodeError:
+        logger.warning("[GroqLLM] Failed to parse role-fit narrative response")
         return None
 
 
@@ -408,6 +564,9 @@ def generate_candidate_summary(
 
     try:
         data = json.loads(result)
+        if not _validate_response(data, ["headline", "executive_summary", "hiring_recommendation"]):
+            logger.warning("[GroqLLM] Candidate summary response missing required keys")
+            return None
         logger.info(f"[GroqLLM] Generated candidate summary for {candidate_name}")
         return data
     except json.JSONDecodeError:
@@ -430,7 +589,7 @@ def generate_batch_executive_report(
     top_candidates = []
     for r in rankings[:10]:
         top_candidates.append(
-            f"#{r.get('rank', '?')} {r.get('name', 'Unknown')} — "
+            f"#{r.get('rank', '?')} {r.get('name', 'Unknown')} -- "
             f"{r.get('match_score', 0):.0f}% match, "
             f"{r.get('missing_count', 0)} gaps"
         )
@@ -446,7 +605,8 @@ def generate_batch_executive_report(
         "'top_pick_rationale' (why the #1 candidate stands out), "
         "'common_gaps' (array of skills most candidates are missing), "
         "'hiring_advice' (1-2 sentences of actionable advice for the recruiter), "
-        "'diversity_of_skills' (brief note on whether candidates bring varied or similar backgrounds)."
+        "'diversity_of_skills' (brief note on whether candidates bring varied or similar backgrounds), "
+        "'market_difficulty' (1 sentence on how hard this role is to fill based on the candidate pool)."
     )
     user_prompt = (
         f"Target Role: {target_role}\n"
@@ -461,6 +621,9 @@ def generate_batch_executive_report(
 
     try:
         data = json.loads(result)
+        if not _validate_response(data, ["pool_quality", "summary"]):
+            logger.warning("[GroqLLM] Batch report response missing required keys")
+            return None
         logger.info(f"[GroqLLM] Generated batch executive report for {len(rankings)} candidates")
         return data
     except json.JSONDecodeError:
@@ -473,7 +636,7 @@ def generate_jd_skills_extraction(
 ) -> Optional[Dict]:
     """
     Use LLM to intelligently parse a job description and extract structured skills.
-    Better than regex — understands context, synonyms, and implied requirements.
+    Better than regex -- understands context, synonyms, and implied requirements.
     """
     if not is_available():
         return None
@@ -486,7 +649,9 @@ def generate_jd_skills_extraction(
         "'required_skills' (array of must-have skill strings), "
         "'nice_to_have' (array of preferred/bonus skill strings), "
         "'experience_level' ('Junior' / 'Mid' / 'Senior' / 'Staff' / 'Principal'), "
-        "'role_summary' (one sentence describing the role)."
+        "'role_summary' (one sentence describing the role), "
+        "'team_size_hint' (estimated team size if mentioned, otherwise 'unknown'), "
+        "'key_responsibilities' (array of 3-5 main responsibilities)."
     )
     user_prompt = f"Job Description:\n{job_description[:4000]}"
 
@@ -496,6 +661,9 @@ def generate_jd_skills_extraction(
 
     try:
         data = json.loads(result)
+        if not _validate_response(data, ["required_skills"]):
+            logger.warning("[GroqLLM] JD extraction response missing required keys")
+            return None
         logger.info(f"[GroqLLM] Extracted skills from JD: "
                      f"{len(data.get('required_skills', []))} required, "
                      f"{len(data.get('nice_to_have', []))} nice-to-have")
@@ -524,6 +692,7 @@ def generate_culture_fit_analysis(
         "'communication_score' (1-10 rating of how well the resume communicates), "
         "'leadership_indicators' (array of specific examples from the resume showing leadership), "
         "'team_fit_notes' (1-2 sentences on likely team dynamics), "
+        "'work_style' (brief assessment: 'independent'/'collaborative'/'mixed'), "
         "'red_flags' (array of any concerning patterns, empty array if none)."
     )
     user_prompt = (
@@ -537,6 +706,9 @@ def generate_culture_fit_analysis(
 
     try:
         data = json.loads(result)
+        if not _validate_response(data, ["soft_skills", "communication_score"]):
+            logger.warning("[GroqLLM] Culture fit response missing required keys")
+            return None
         logger.info("[GroqLLM] Generated culture fit analysis")
         return data
     except json.JSONDecodeError:

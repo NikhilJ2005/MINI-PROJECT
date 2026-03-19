@@ -51,6 +51,8 @@ from modules.groq_llm import (
     generate_batch_executive_report,
     generate_jd_skills_extraction,
     generate_culture_fit_analysis,
+    generate_skill_credibility_assessment,
+    generate_role_fit_narrative,
 )
 from modules.web_search import (
     is_available as serper_available,
@@ -284,6 +286,8 @@ async def _run_single_analysis(
         demonstrated_skills,
         role_data["required_skills"],
         role_data.get("nice_to_have", []),
+        repos_analyzed=github_result.get("repos_analyzed", 0),
+        skills_master=state.skills_master,
     )
     X, y = state.feature_engineer.encode_for_model(skill_matrix)
 
@@ -381,6 +385,30 @@ async def _run_single_analysis(
             )
             if ai_culture:
                 report["ai_culture_fit"] = ai_culture
+
+            # AI Skill Credibility Assessment (validates resume-only claims)
+            if analysis["claims_not_proven"]:
+                ai_credibility = generate_skill_credibility_assessment(
+                    resume_text=resume_text,
+                    claimed_skills=claimed_skills,
+                    demonstrated_skills=demonstrated_skills,
+                    claims_not_proven=analysis["claims_not_proven"],
+                )
+                if ai_credibility:
+                    report["ai_skill_credibility"] = ai_credibility
+
+            # AI Role-Fit Narrative (detailed fit analysis)
+            ai_role_fit = generate_role_fit_narrative(
+                target_role=target_role,
+                match_score=analysis["match_score"],
+                strengths=analysis["strengths"],
+                missing_skills=analysis["missing_required"],
+                claims_not_proven=analysis.get("claims_not_proven", []),
+                hidden_strengths=analysis.get("hidden_strengths", []),
+                github_insights=report.get("github_insights"),
+            )
+            if ai_role_fit:
+                report["ai_role_fit_narrative"] = ai_role_fit
 
         except Exception as e:
             logger.warning(f"[GroqLLM] Enhancement failed (non-critical): {e}")

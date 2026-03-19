@@ -166,32 +166,50 @@ const Results = memo(function Results({ report }) {
                     <div className="ml-insights">
                         <h3>ML Model Insights</h3>
                         <div className="ml-insights-container">
-                            <div className="ml-grid">
+                            <div className="ml-grid ml-grid-3">
                                 <div className="ml-metric">
                                     <div className="metric-value">{ml_insights.lr_accuracy}%</div>
-                                    <div className="metric-label">Logistic Regression Accuracy</div>
+                                    <div className="metric-label">Logistic Regression</div>
                                 </div>
                                 <div className="ml-metric">
                                     <div className="metric-value">{ml_insights.dt_accuracy}%</div>
-                                    <div className="metric-label">Decision Tree Accuracy</div>
+                                    <div className="metric-label">Decision Tree</div>
+                                </div>
+                                <div className="ml-metric">
+                                    <div className="metric-value">{ml_insights.feature_names?.length || 11}</div>
+                                    <div className="metric-label">Features Used</div>
                                 </div>
                             </div>
+                            {ml_insights.ensemble_explanation && (
+                                <div className="ml-explanation">
+                                    <strong>Ensemble: </strong>
+                                    {ml_insights.ensemble_explanation}
+                                </div>
+                            )}
                             {ml_insights.model_explanation && (
                                 <div className="ml-explanation">
                                     <strong>How it works: </strong>
                                     {ml_insights.model_explanation}
                                 </div>
                             )}
-                            {ml_insights.lr_explanation && (
-                                <div className="ml-explanation">
-                                    <strong>Logistic Regression: </strong>
-                                    {ml_insights.lr_explanation}
-                                </div>
-                            )}
-                            {ml_insights.dt_explanation && (
-                                <div className="ml-explanation">
-                                    <strong>Decision Tree: </strong>
-                                    {ml_insights.dt_explanation}
+                            {ml_insights.feature_importance?.dt_importance && (
+                                <div className="feature-importance-section">
+                                    <h4>Feature Importance (Decision Tree)</h4>
+                                    <div className="feature-bars">
+                                        {Object.entries(ml_insights.feature_importance.dt_importance)
+                                            .sort(([,a], [,b]) => b - a)
+                                            .slice(0, 6)
+                                            .map(([name, value]) => (
+                                                <div className="feature-bar-row" key={name}>
+                                                    <span className="feature-bar-name">{name.replace(/_/g, ' ')}</span>
+                                                    <div className="feature-bar-track">
+                                                        <div className="feature-bar-fill" style={{ width: `${Math.min(value * 100 / 0.5, 100)}%` }}></div>
+                                                    </div>
+                                                    <span className="feature-bar-val">{(value * 100).toFixed(1)}%</span>
+                                                </div>
+                                            ))
+                                        }
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -228,6 +246,95 @@ const Results = memo(function Results({ report }) {
                             )}
                             {report.ai_candidate_summary.salary_positioning && (
                                 <p className="salary-note"><strong>Level:</strong> {report.ai_candidate_summary.salary_positioning}</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Skill Credibility Assessment */}
+                {report.ai_skill_credibility && (
+                    <div className="ai-credibility-section">
+                        <h3>Skill Credibility Assessment</h3>
+                        <div className="credibility-container">
+                            {report.ai_skill_credibility.overall_credibility_score != null && (
+                                <div className="credibility-score-badge">
+                                    Credibility Score: <strong>{report.ai_skill_credibility.overall_credibility_score}/10</strong>
+                                </div>
+                            )}
+                            {report.ai_skill_credibility.assessment && (
+                                <p className="ai-exec-summary">{report.ai_skill_credibility.assessment}</p>
+                            )}
+                            {report.ai_skill_credibility.verified_skills?.length > 0 && (
+                                <div className="credibility-group">
+                                    <h4>Verified Claims</h4>
+                                    <div className="credibility-tags verified">
+                                        {report.ai_skill_credibility.verified_skills.map((s, i) => (
+                                            <span key={i} className="cred-tag cred-verified">{s}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {report.ai_skill_credibility.questionable_skills?.length > 0 && (
+                                <div className="credibility-group">
+                                    <h4>Needs Verification</h4>
+                                    <div className="credibility-tags questionable">
+                                        {report.ai_skill_credibility.questionable_skills.map((s, i) => (
+                                            <span key={i} className="cred-tag cred-questionable">{s}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {report.ai_skill_credibility.recommendations?.length > 0 && (
+                                <div className="ai-tips">
+                                    <h4>Verification Recommendations</h4>
+                                    <ul>
+                                        {report.ai_skill_credibility.recommendations.map((r, i) => (
+                                            <li key={i}>{r}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Role-Fit Narrative */}
+                {report.ai_role_fit_narrative && (
+                    <div className="ai-rolefit-section">
+                        <h3>Role-Fit Analysis</h3>
+                        <div className="rolefit-container">
+                            {report.ai_role_fit_narrative.fit_score != null && (
+                                <div className={`rolefit-score-badge ${report.ai_role_fit_narrative.fit_score >= 7 ? 'fit-strong' : report.ai_role_fit_narrative.fit_score >= 5 ? 'fit-moderate' : 'fit-weak'}`}>
+                                    Role Fit: <strong>{report.ai_role_fit_narrative.fit_score}/10</strong>
+                                </div>
+                            )}
+                            {report.ai_role_fit_narrative.narrative && (
+                                <p className="ai-exec-summary">{report.ai_role_fit_narrative.narrative}</p>
+                            )}
+                            {report.ai_role_fit_narrative.standout_qualities?.length > 0 && (
+                                <div className="rolefit-qualities">
+                                    <h4>Standout Qualities</h4>
+                                    <ul>
+                                        {report.ai_role_fit_narrative.standout_qualities.map((q, i) => (
+                                            <li key={i}>{q}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {report.ai_role_fit_narrative.growth_areas?.length > 0 && (
+                                <div className="rolefit-growth">
+                                    <h4>Growth Areas</h4>
+                                    <ul>
+                                        {report.ai_role_fit_narrative.growth_areas.map((g, i) => (
+                                            <li key={i}>{g}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {report.ai_role_fit_narrative.onboarding_estimate && (
+                                <p className="onboarding-note">
+                                    <strong>Estimated Onboarding:</strong> {report.ai_role_fit_narrative.onboarding_estimate}
+                                </p>
                             )}
                         </div>
                     </div>

@@ -469,3 +469,221 @@ h4 {
   color: var(--text-gray);
   margin-bottom: var(--space-4);
 }
+
+/* --- 3-column ML grid --- */
+.ml-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 600px) {
+  .ml-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Feature Importance Bars --- */
+.feature-importance-section {
+  margin-top: var(--space-4);
+}
+
+.feature-importance-section h4 {
+  padding-left: 0;
+  margin-bottom: var(--space-3);
+}
+
+.feature-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.feature-bar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.feature-bar-name {
+  min-width: 150px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--text-dark);
+}
+
+.feature-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.feature-bar-fill {
+  height: 100%;
+  background: var(--gradient-primary);
+  border-radius: var(--radius-full);
+  transition: width 0.5s ease-in-out;
+}
+
+.feature-bar-val {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-gray);
+  min-width: 45px;
+  text-align: right;
+}
+
+/* --- AI Skill Credibility Section --- */
+.ai-credibility-section {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow-md);
+  margin-bottom: var(--space-6);
+  text-align: left;
+  border: 1px solid var(--border-light);
+  border-left: 4px solid #f59e0b;
+}
+
+.credibility-score-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.credibility-group {
+  margin-bottom: var(--space-3);
+}
+
+.credibility-group h4 {
+  padding-left: 0;
+  margin-bottom: var(--space-2);
+}
+
+.credibility-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cred-tag {
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.cred-verified {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.cred-questionable {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* --- AI Role-Fit Narrative Section --- */
+.ai-rolefit-section {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow-md);
+  margin-bottom: var(--space-6);
+  text-align: left;
+  border: 1px solid var(--border-light);
+  border-left: 4px solid #6366f1;
+}
+
+.rolefit-score-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.rolefit-score-badge.fit-strong {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.rolefit-score-badge.fit-moderate {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rolefit-score-badge.fit-weak {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.rolefit-qualities ul,
+.rolefit-growth ul {
+  list-style: disc;
+  padding-left: 20px;
+  margin: 6px 0 14px;
+}
+
+.rolefit-qualities li,
+.rolefit-growth li {
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.rolefit-growth li {
+  color: #b45309;
+}
+
+.onboarding-note {
+  font-size: 0.9rem;
+  color: var(--text-gray);
+  margin: 4px 0;
+  padding: var(--space-2) 14px;
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
+  display: inline-block;
+}
+
+/* --- Dark mode overrides for new sections --- */
+[data-theme="dark"] .credibility-score-badge {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .cred-verified {
+  background: rgba(22, 163, 74, 0.2);
+  color: #4ade80;
+}
+
+[data-theme="dark"] .cred-questionable {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .rolefit-score-badge.fit-strong {
+  background: rgba(22, 163, 74, 0.2);
+  color: #4ade80;
+}
+
+[data-theme="dark"] .rolefit-score-badge.fit-moderate {
+  background: rgba(202, 138, 4, 0.2);
+  color: #fbbf24;
+}
+
+[data-theme="dark"] .rolefit-score-badge.fit-weak {
+  background: rgba(220, 38, 38, 0.2);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .rolefit-growth li {
+  color: #fbbf24;
+}
