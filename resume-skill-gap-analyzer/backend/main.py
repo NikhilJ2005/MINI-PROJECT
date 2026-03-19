@@ -158,6 +158,7 @@ async def lifespan(app: FastAPI):
 
     logger.info(f"Server ready | LR acc: {state.ml_model.lr_accuracy}% | "
                 f"DT acc: {state.ml_model.dt_accuracy}% | "
+                f"RF acc: {state.ml_model.rf_accuracy}% | "
                 f"Roles: {len(state.job_roles_data)} | Skills: {total_skills}")
 
     yield

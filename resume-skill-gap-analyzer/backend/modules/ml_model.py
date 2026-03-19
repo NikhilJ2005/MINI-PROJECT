@@ -1,15 +1,15 @@
 """
 =============================================================================
- ML Model — Logistic Regression + Decision Tree Ensemble
+ ML Model — Logistic Regression + Decision Tree + Random Forest Ensemble
 =============================================================================
- Two models working together:
-   Logistic Regression → outputs probability 0-1 (confidence score)
+ Three models working together for better accuracy:
+   Logistic Regression → calibrated probability scores (0-1)
    Decision Tree       → explainable IF/THEN rules
-   Ensemble            → weighted average of both (more robust)
+   Random Forest       → robust ensemble of many trees (reduces overfitting)
 
  Training pipeline:
    1. Split data 80/20 (stratified to preserve class balance)
-   2. Train both models with class_weight='balanced'
+   2. Train all three models with class_weight='balanced'
    3. Evaluate on test set (accuracy, F1, precision, recall, AUC)
    4. Run 5-fold cross-validation for honest accuracy
    5. Save models to disk for fast startup next time
@@ -24,6 +24,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from loguru import logger
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -46,10 +47,11 @@ from sklearn.tree import DecisionTreeClassifier
 # ─────────────────────────────────────────────────────────────────────
 #  Constants
 # ─────────────────────────────────────────────────────────────────────
-# Ensemble weights: LR gets slightly more weight because it outputs
-# calibrated probabilities; DT is better at capturing edge cases
-LR_WEIGHT = 0.55
-DT_WEIGHT = 0.45
+# Ensemble weights: RF gets most weight (best generalization),
+# LR provides calibrated probabilities, DT adds explainability
+LR_WEIGHT = 0.30
+DT_WEIGHT = 0.20
+RF_WEIGHT = 0.50
 
 # Prediction threshold: above this = model says "candidate has skill"
 PREDICTION_THRESHOLD = 0.5
@@ -65,15 +67,14 @@ class SkillGapMLModel:
 
     def __init__(self) -> None:
         """
-        Initialize both models with optimized hyperparameters.
-        class_weight='balanced' is critical — skill datasets are
-        imbalanced (more gaps than strong matches in reality).
+        Initialize all three models with optimized hyperparameters.
+        class_weight='balanced' handles imbalanced skill datasets.
         """
-        # Logistic Regression inside a Pipeline with StandardScaler
+        # Logistic Regression with tuned C parameter
         self.lr_pipeline = Pipeline([
             ('scaler', StandardScaler()),
             ('classifier', LogisticRegression(
-                C=1.0,
+                C=0.5,
                 max_iter=1000,
                 random_state=42,
                 class_weight='balanced',
@@ -81,13 +82,24 @@ class SkillGapMLModel:
             ))
         ])
 
-        # Decision Tree — no scaler needed, tree-based
+        # Decision Tree — deeper with finer leaf control
         self.dt_model = DecisionTreeClassifier(
-            max_depth=5,
-            min_samples_split=10,
-            min_samples_leaf=4,
+            max_depth=8,
+            min_samples_split=8,
+            min_samples_leaf=3,
             random_state=42,
             class_weight='balanced'
+        )
+
+        # Random Forest — robust ensemble of trees
+        self.rf_model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            min_samples_split=5,
+            min_samples_leaf=2,
+            random_state=42,
+            class_weight='balanced',
+            n_jobs=-1,
         )
 
         self.is_trained = False
@@ -99,8 +111,9 @@ class SkillGapMLModel:
         # Accuracy fields used by report_generator
         self.lr_accuracy: float = 0.0
         self.dt_accuracy: float = 0.0
+        self.rf_accuracy: float = 0.0
 
-        logger.info("[MLModel] Initialized Logistic Regression + Decision Tree models.")
+        logger.info("[MLModel] Initialized LR + DT + RF ensemble.")
 
     # =================================================================
     #  TRAINING
@@ -117,7 +130,7 @@ class SkillGapMLModel:
 
         Steps:
           1. Split data 80/20 (stratified)
-          2. Train both models
+          2. Train all three models
           3. Evaluate on test set
           4. Run 5-fold cross-validation
           5. Save models to disk
@@ -134,21 +147,26 @@ class SkillGapMLModel:
             stratify=y
         )
 
-        # -- Train Both Models --
+        # -- Train All Three Models --
         logger.info("Training Logistic Regression...")
         self.lr_pipeline.fit(X_train, y_train)
 
         logger.info("Training Decision Tree...")
         self.dt_model.fit(X_train, y_train)
 
+        logger.info("Training Random Forest...")
+        self.rf_model.fit(X_train, y_train)
+
         self.is_trained = True
 
         # -- Evaluate on Test Set --
         lr_metrics = self._evaluate(self.lr_pipeline, X_test, y_test, "LR")
         dt_metrics = self._evaluate(self.dt_model, X_test, y_test, "DT")
+        rf_metrics = self._evaluate(self.rf_model, X_test, y_test, "RF")
 
         self.lr_accuracy = round(lr_metrics['accuracy'] * 100, 2)
         self.dt_accuracy = round(dt_metrics['accuracy'] * 100, 2)
+        self.rf_accuracy = round(rf_metrics['accuracy'] * 100, 2)
 
         # -- Cross Validation (5-fold for honest accuracy) --
         cv_scores = {}
@@ -156,22 +174,27 @@ class SkillGapMLModel:
             cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             lr_cv = cross_val_score(self.lr_pipeline, X, y, cv=cv, scoring='f1')
             dt_cv = cross_val_score(self.dt_model, X, y, cv=cv, scoring='f1')
+            rf_cv = cross_val_score(self.rf_model, X, y, cv=cv, scoring='f1')
             cv_scores = {
                 'lr_cv_f1_mean': round(float(lr_cv.mean()), 4),
                 'lr_cv_f1_std': round(float(lr_cv.std()), 4),
                 'dt_cv_f1_mean': round(float(dt_cv.mean()), 4),
                 'dt_cv_f1_std': round(float(dt_cv.std()), 4),
+                'rf_cv_f1_mean': round(float(rf_cv.mean()), 4),
+                'rf_cv_f1_std': round(float(rf_cv.std()), 4),
             }
             logger.info(
                 f"Cross-validation F1 | "
                 f"LR: {lr_cv.mean():.3f} +/-{lr_cv.std():.3f} | "
-                f"DT: {dt_cv.mean():.3f} +/-{dt_cv.std():.3f}"
+                f"DT: {dt_cv.mean():.3f} +/-{dt_cv.std():.3f} | "
+                f"RF: {rf_cv.mean():.3f} +/-{rf_cv.std():.3f}"
             )
 
         # -- Store All Metrics --
         self.metrics = {
             'lr': lr_metrics,
             'dt': dt_metrics,
+            'rf': rf_metrics,
             'cross_validation': cv_scores,
             'train_samples': len(X_train),
             'test_samples': len(X_test),
@@ -204,9 +227,9 @@ class SkillGapMLModel:
     # =================================================================
     def predict(self, X: pd.DataFrame) -> Dict:
         """
-        Run both models and return ensemble predictions.
+        Run all three models and return ensemble predictions.
 
-        Ensemble = LR_WEIGHT * LR_probability + DT_WEIGHT * DT_probability
+        Ensemble = LR_WEIGHT * LR + DT_WEIGHT * DT + RF_WEIGHT * RF
         If ensemble probability > PREDICTION_THRESHOLD → "has skill"
         """
         if not self.is_trained:
@@ -229,9 +252,14 @@ class SkillGapMLModel:
 
         lr_proba = self.lr_pipeline.predict_proba(X)[:, 1]
         dt_proba = self.dt_model.predict_proba(X)[:, 1]
+        rf_proba = self.rf_model.predict_proba(X)[:, 1]
 
-        # Ensemble: weighted average of both models
-        ensemble_proba = (LR_WEIGHT * lr_proba) + (DT_WEIGHT * dt_proba)
+        # Ensemble: weighted average of all three models
+        ensemble_proba = (
+            LR_WEIGHT * lr_proba +
+            DT_WEIGHT * dt_proba +
+            RF_WEIGHT * rf_proba
+        )
 
         # Round probabilities for cleaner output
         lr_probs_rounded = [round(float(p), 4) for p in lr_proba]
@@ -254,7 +282,7 @@ class SkillGapMLModel:
     # =================================================================
     def get_feature_importance(self) -> Dict:
         """
-        Feature importance from DT and coefficient magnitude from LR.
+        Feature importance from all models.
         Shows which of the 4 features matter most for predictions.
         """
         if not self.is_trained:
@@ -270,13 +298,19 @@ class SkillGapMLModel:
             [round(float(v), 4) for v in abs(self.lr_pipeline.named_steps['classifier'].coef_[0])]
         ))
 
+        rf_imp = dict(zip(
+            self.FEATURE_NAMES,
+            [round(float(v), 4) for v in self.rf_model.feature_importances_]
+        ))
+
         return {
             'dt_importance': dt_imp,
             'lr_coefficients': lr_coefs,
+            'rf_importance': rf_imp,
             'explanation': (
-                "DT importance: how often each feature is used "
-                "to split the tree. LR coefficients: how much "
-                "each feature moves the probability."
+                "DT importance: how often each feature splits the tree. "
+                "LR coefficients: how much each feature moves the probability. "
+                "RF importance: averaged across 100 trees for stable ranking."
             )
         }
 
@@ -285,14 +319,15 @@ class SkillGapMLModel:
     # =================================================================
     def get_model_summary(self) -> Dict:
         """
-        Human-readable summary of both models.
+        Human-readable summary of all models.
         Used by report_generator.py for the ML insights section.
         """
         return {
-            "models_used": ["Logistic Regression", "Decision Tree"],
+            "models_used": ["Logistic Regression", "Decision Tree", "Random Forest"],
             "is_trained": self.is_trained,
             "lr_accuracy": self.lr_accuracy,
             "dt_accuracy": self.dt_accuracy,
+            "rf_accuracy": self.rf_accuracy,
             "feature_importance": self.get_feature_importance(),
             "lr_explanation": (
                 "Logistic Regression calculates the probability "
@@ -306,13 +341,20 @@ class SkillGapMLModel:
                 "confidence=95%. Fully explainable — you can "
                 "trace exactly why each decision was made."
             ),
+            "rf_explanation": (
+                "Random Forest combines 100 decision trees trained "
+                "on different data subsets. This reduces overfitting "
+                "and gives the most robust predictions of all three models."
+            ),
             "ensemble_explanation": (
-                f"Final score = {int(LR_WEIGHT*100)}% LR + {int(DT_WEIGHT*100)}% DT. "
-                "Combining both models reduces individual errors "
+                f"Final score = {int(LR_WEIGHT*100)}% LR + "
+                f"{int(DT_WEIGHT*100)}% DT + {int(RF_WEIGHT*100)}% RF. "
+                "Combining three models reduces individual errors "
                 "and gives more reliable predictions."
             ),
             "training_explanation": (
-                "Both models were trained on curated skill assessment data. "
+                "Models trained on real HuggingFace resume/job datasets + "
+                "synthetic augmentation for comprehensive coverage. "
                 f"Features used: {', '.join(self.FEATURE_NAMES)}. "
                 "class_weight='balanced' handles imbalanced datasets. "
                 "Cross-validation ensures honest accuracy reporting."
@@ -328,11 +370,12 @@ class SkillGapMLModel:
         """Log a clean training summary to console."""
         lr = self.metrics.get('lr', {})
         dt = self.metrics.get('dt', {})
+        rf = self.metrics.get('rf', {})
         cv = self.metrics.get('cross_validation', {})
 
-        logger.info("=" * 50)
-        logger.info("       ML MODEL TRAINING COMPLETE")
-        logger.info("=" * 50)
+        logger.info("=" * 60)
+        logger.info("          ML MODEL TRAINING COMPLETE")
+        logger.info("=" * 60)
         logger.info(
             f"  Logistic Regression | "
             f"Acc: {lr.get('accuracy', 0):.1%} | "
@@ -345,31 +388,41 @@ class SkillGapMLModel:
             f"F1: {dt.get('f1', 0):.3f} | "
             f"AUC: {dt.get('roc_auc', 0):.3f}"
         )
+        logger.info(
+            f"  Random Forest       | "
+            f"Acc: {rf.get('accuracy', 0):.1%} | "
+            f"F1: {rf.get('f1', 0):.3f} | "
+            f"AUC: {rf.get('roc_auc', 0):.3f}"
+        )
         if cv:
             logger.info(
                 f"  Cross-Val (5-fold)  | "
                 f"LR F1: {cv.get('lr_cv_f1_mean', 0):.3f} "
                 f"+/-{cv.get('lr_cv_f1_std', 0):.3f} | "
                 f"DT F1: {cv.get('dt_cv_f1_mean', 0):.3f} "
-                f"+/-{cv.get('dt_cv_f1_std', 0):.3f}"
+                f"+/-{cv.get('dt_cv_f1_std', 0):.3f} | "
+                f"RF F1: {cv.get('rf_cv_f1_mean', 0):.3f} "
+                f"+/-{cv.get('rf_cv_f1_std', 0):.3f}"
             )
         logger.info(
             f"  Dataset: {self.dataset_source} | "
             f"Samples: {self.metrics.get('train_samples', 0)} train "
             f"/ {self.metrics.get('test_samples', 0)} test"
         )
-        logger.info("=" * 50)
+        logger.info("=" * 60)
 
     # =================================================================
     #  SAVE / LOAD MODELS
     # =================================================================
     def save_models(self):
-        """Save both models to disk with joblib."""
+        """Save all models to disk with joblib."""
         try:
             joblib.dump(self.lr_pipeline,
                         self.model_save_path / "lr_model.pkl")
             joblib.dump(self.dt_model,
                         self.model_save_path / "dt_model.pkl")
+            joblib.dump(self.rf_model,
+                        self.model_save_path / "rf_model.pkl")
             with open(self.model_save_path / "metrics.json", "w") as f:
                 json.dump(self.metrics, f, indent=2)
             logger.info(f"Models saved to {self.model_save_path}")
@@ -385,6 +438,7 @@ class SkillGapMLModel:
         try:
             lr_path = self.model_save_path / "lr_model.pkl"
             dt_path = self.model_save_path / "dt_model.pkl"
+            rf_path = self.model_save_path / "rf_model.pkl"
             metrics_path = self.model_save_path / "metrics.json"
 
             if not (lr_path.exists() and dt_path.exists()):
@@ -393,6 +447,13 @@ class SkillGapMLModel:
 
             self.lr_pipeline = joblib.load(lr_path)
             self.dt_model = joblib.load(dt_path)
+
+            # RF model might not exist for older saves — train fresh if missing
+            if rf_path.exists():
+                self.rf_model = joblib.load(rf_path)
+            else:
+                logger.info("No saved RF model — will retrain all models")
+                return False
 
             if metrics_path.exists():
                 with open(metrics_path) as f:
@@ -407,12 +468,16 @@ class SkillGapMLModel:
             self.dt_accuracy = round(
                 self.metrics.get('dt', {}).get('accuracy', 0) * 100, 2
             )
+            self.rf_accuracy = round(
+                self.metrics.get('rf', {}).get('accuracy', 0) * 100, 2
+            )
 
             self.is_trained = True
             logger.info(
                 f"Loaded saved models | "
                 f"LR acc: {self.lr_accuracy}% | "
-                f"DT acc: {self.dt_accuracy}%"
+                f"DT acc: {self.dt_accuracy}% | "
+                f"RF acc: {self.rf_accuracy}%"
             )
             return True
 

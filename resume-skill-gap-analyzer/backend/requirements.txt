@@ -37,3 +37,6 @@ groq
 
 # --- Rate Limiting ---
 slowapi
+
+# --- HuggingFace Datasets (build-time data processing) ---
+datasets

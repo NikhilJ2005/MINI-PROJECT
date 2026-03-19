@@ -1,47 +1,66 @@
 {
   "lr": {
-    "accuracy": 0.7625,
-    "precision": 0.7654,
-    "recall": 0.9013,
-    "f1": 0.8278,
-    "roc_auc": 0.8331,
+    "accuracy": 0.8993,
+    "precision": 0.8467,
+    "recall": 0.9636,
+    "f1": 0.9014,
+    "roc_auc": 0.9347,
     "confusion_matrix": [
       [
-        46,
-        42
+        1185,
+        225
       ],
       [
-        15,
-        137
+        47,
+        1243
       ]
     ]
   },
   "dt": {
-    "accuracy": 0.7625,
-    "precision": 0.7654,
-    "recall": 0.9013,
-    "f1": 0.8278,
-    "roc_auc": 0.8304,
+    "accuracy": 0.8993,
+    "precision": 0.8467,
+    "recall": 0.9636,
+    "f1": 0.9014,
+    "roc_auc": 0.9347,
     "confusion_matrix": [
       [
-        46,
-        42
+        1185,
+        225
       ],
       [
-        15,
-        137
+        47,
+        1243
+      ]
+    ]
+  },
+  "rf": {
+    "accuracy": 0.8993,
+    "precision": 0.8467,
+    "recall": 0.9636,
+    "f1": 0.9014,
+    "roc_auc": 0.9347,
+    "confusion_matrix": [
+      [
+        1185,
+        225
+      ],
+      [
+        47,
+        1243
       ]
     ]
   },
   "cross_validation": {
-    "lr_cv_f1_mean": 0.8025,
-    "lr_cv_f1_std": 0.0306,
-    "dt_cv_f1_mean": 0.8206,
-    "dt_cv_f1_std": 0.0346
+    "lr_cv_f1_mean": 0.9013,
+    "lr_cv_f1_std": 0.0047,
+    "dt_cv_f1_mean": 0.9013,
+    "dt_cv_f1_std": 0.0047,
+    "rf_cv_f1_mean": 0.9013,
+    "rf_cv_f1_std": 0.0047
   },
-  "train_samples": 960,
-  "test_samples": 240,
-  "dataset_source": "synthetic (1200 samples)",
+  "train_samples": 10800,
+  "test_samples": 2700,
+  "dataset_source": "HuggingFace (12000 samples) + Synthetic (1500 samples)",
   "features": [
     "in_resume",
     "in_github",
