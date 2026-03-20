@@ -143,24 +143,28 @@ function App() {
       <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
 
       <div className="app-layout">
-        <AnalysisHistory
-          refreshKey={historyRefreshKey}
-          activeAnalysisId={currentAnalysisId}
-          onSelect={handleHistorySelect}
-          onNewAnalysis={handleNewAnalysis}
-          isOpen={historyOpen}
-          onToggle={() => setHistoryOpen((o) => !o)}
-        />
+        <ErrorBoundary>
+          <AnalysisHistory
+            refreshKey={historyRefreshKey}
+            activeAnalysisId={currentAnalysisId}
+            onSelect={handleHistorySelect}
+            onNewAnalysis={handleNewAnalysis}
+            isOpen={historyOpen}
+            onToggle={() => setHistoryOpen((o) => !o)}
+          />
+        </ErrorBoundary>
 
         <main className={`container main-content ${historyOpen ? "with-sidebar" : ""}`}>
           {activeTab === "analyze" && (
             <>
               <section className="input-section">
-                <InputSection
-                  onError={setError}
-                  onAnalyze={setLoading}
-                  obtainedReport={handleReportReceived}
-                />
+                <ErrorBoundary>
+                  <InputSection
+                    onError={setError}
+                    onAnalyze={setLoading}
+                    obtainedReport={handleReportReceived}
+                  />
+                </ErrorBoundary>
               </section>
               {error && <div className="error-message">{error}</div>}
               {loading && (

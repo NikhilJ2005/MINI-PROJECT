@@ -36,7 +36,7 @@ const Results = memo(function Results({ report }) {
                     const role = report.target_role || "Role";
                     link.download = `Report_${name}_${role}.pdf`;
                     link.click();
-                    URL.revokeObjectURL(url);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
                     showToast("PDF downloaded!", "success");
                     return;
                 }
@@ -113,7 +113,7 @@ const Results = memo(function Results({ report }) {
         const name = report.candidate_info?.name || "Candidate";
         link.download = `SkillGap_${name}_skills.csv`;
         link.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         showToast("CSV exported!", "success");
     }, [report]);
 

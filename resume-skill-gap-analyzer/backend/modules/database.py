@@ -120,8 +120,6 @@ class Database:
                     ON candidates(github_username);
                 CREATE INDEX IF NOT EXISTS idx_candidates_email
                     ON candidates(email);
-                CREATE INDEX IF NOT EXISTS idx_analyses_composite
-                    ON analyses(composite_score DESC);
                 CREATE INDEX IF NOT EXISTS idx_batch_results_analysis
                     ON batch_results(analysis_id);
             """)
@@ -131,6 +129,9 @@ class Database:
                 conn.execute("SELECT composite_score FROM analyses LIMIT 1")
             except sqlite3.OperationalError:
                 conn.execute("ALTER TABLE analyses ADD COLUMN composite_score REAL DEFAULT 0")
+
+            # Index on composite_score (must be after migration that adds the column)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_analyses_composite ON analyses(composite_score DESC)")
 
     # -----------------------------------------------------------------
     #  Candidate CRUD

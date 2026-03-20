@@ -99,7 +99,7 @@ function CandidatesList() {
     link.href = url;
     link.download = "candidates.csv";
     link.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToast("CSV exported!", "success");
   };
 

@@ -52,7 +52,7 @@ function RankingsView() {
     link.href = url;
     link.download = `rankings_${targetRole}.csv`;
     link.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToast("Rankings CSV exported!", "success");
   };
 
