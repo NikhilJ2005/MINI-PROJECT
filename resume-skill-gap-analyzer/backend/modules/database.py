@@ -116,6 +116,14 @@ class Database:
                     ON analyses(match_score DESC);
                 CREATE INDEX IF NOT EXISTS idx_batch_results_batch
                     ON batch_results(batch_id);
+                CREATE INDEX IF NOT EXISTS idx_candidates_github
+                    ON candidates(github_username);
+                CREATE INDEX IF NOT EXISTS idx_candidates_email
+                    ON candidates(email);
+                CREATE INDEX IF NOT EXISTS idx_analyses_composite
+                    ON analyses(composite_score DESC);
+                CREATE INDEX IF NOT EXISTS idx_batch_results_analysis
+                    ON batch_results(analysis_id);
             """)
 
             # Migration: add composite_score column if missing

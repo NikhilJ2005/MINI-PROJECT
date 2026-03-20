@@ -35,7 +35,7 @@ function Role({onTargetSet}) {
                 <select id="target-role" className="select-input" onChange={(e)=>onTargetSet(e.target.value)} required>
                     {loading && <option>Loading roles...</option>}
 
-                    {error && <option>{error}</option>}
+                    {error && <option disabled>{error}</option>}
 
                     {!loading && !error && (
                         <>

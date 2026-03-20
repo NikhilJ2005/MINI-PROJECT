@@ -90,15 +90,65 @@ class ReportGenerator:
             return "Very Low -- insufficient data for reliable assessment"
 
     # -----------------------------------------------------------------
-    #  Resource Hint Helper
+    #  Skill Prerequisites (learning dependency order)
     # -----------------------------------------------------------------
-    @staticmethod
-    def _get_resource_hint(skill: str) -> str:
+    SKILL_PREREQUISITES = {
+        "Kubernetes": ["Docker", "Linux"],
+        "Django": ["Python"],
+        "Flask": ["Python"],
+        "FastAPI": ["Python"],
+        "React": ["JavaScript", "HTML", "CSS"],
+        "Next.js": ["React", "JavaScript"],
+        "Vue": ["JavaScript", "HTML", "CSS"],
+        "Angular": ["TypeScript", "JavaScript"],
+        "Spring Boot": ["Java", "Spring"],
+        "Spring": ["Java"],
+        "TensorFlow": ["Python", "Machine Learning"],
+        "PyTorch": ["Python", "Machine Learning"],
+        "Keras": ["Python", "Deep Learning"],
+        "Scikit-learn": ["Python", "Statistics"],
+        "Pandas": ["Python"],
+        "NumPy": ["Python"],
+        "Terraform": ["AWS", "Linux"],
+        "Helm": ["Kubernetes", "Docker"],
+        "ArgoCD": ["Kubernetes", "CI/CD"],
+        "Airflow": ["Python", "Docker"],
+        "Spark": ["Python", "SQL"],
+        "LangChain": ["Python", "LLM"],
+        "RAG": ["LLM", "Python"],
+        "GraphQL": ["REST API", "JavaScript"],
+        "CI/CD": ["Git", "Docker"],
+        "Microservices": ["REST API", "Docker"],
+        "Deep Learning": ["Machine Learning", "Python"],
+        "Machine Learning": ["Python", "Statistics"],
+    }
+
+    # -----------------------------------------------------------------
+    #  Skill Difficulty Ratings
+    # -----------------------------------------------------------------
+    SKILL_DIFFICULTY = {
+        "Git": 1, "HTML": 1, "CSS": 1, "SQL": 1, "Markdown": 1,
+        "Python": 2, "JavaScript": 2, "Docker": 2, "REST API": 2, "React": 2,
+        "TypeScript": 2, "Java": 2, "Node.js": 2, "Express": 2, "Vue": 2,
+        "Angular": 2, "Flask": 2, "Django": 2, "FastAPI": 2, "C#": 2,
+        "Go": 2, "Ruby": 2, "PHP": 2, "Kotlin": 2, "Swift": 2,
+        "Kubernetes": 3, "Machine Learning": 3, "System Design": 3, "AWS": 3,
+        "Azure": 3, "GCP": 3, "Terraform": 3, "CI/CD": 3, "GraphQL": 3,
+        "Spring Boot": 3, "Microservices": 3, "Spark": 3, "Airflow": 3,
+        "Deep Learning": 4, "Distributed Systems": 4, "LLM": 3,
+        "TensorFlow": 3, "PyTorch": 3, "RAG": 3, "LangChain": 3,
+    }
+
+    DIFFICULTY_LABELS = {1: "Beginner", 2: "Intermediate", 3: "Advanced", 4: "Expert"}
+    DIFFICULTY_WEEKS = {1: "1-2 weeks", 2: "2-4 weeks", 3: "4-12 weeks", 4: "3-6 months"}
+
+    # -----------------------------------------------------------------
+    #  Resource Hint Helper (with difficulty)
+    # -----------------------------------------------------------------
+    @classmethod
+    def _get_resource_hint(cls, skill: str) -> str:
         """
         Suggest what type of learning resource would help for a given skill.
-
-        This is a simple rule-based mapping — in production, this could
-        be connected to an actual course recommendation API.
 
         Args:
             skill: The skill name.
@@ -106,7 +156,6 @@ class ReportGenerator:
         Returns:
             A resource suggestion string.
         """
-        # Map skills to resource types based on their nature
         programming_langs = {"Python", "JavaScript", "Java", "C++", "TypeScript", "Go",
                              "Rust", "R", "Kotlin", "Swift", "Scala", "C#", "PHP", "Ruby", "SQL"}
         frameworks = {"React", "Angular", "Vue", "Django", "Flask", "FastAPI", "Spring",
@@ -131,6 +180,42 @@ class ReportGenerator:
             return f"Structured course on {skill} + implement a portfolio project"
         else:
             return f"Self-study + practice project using {skill}"
+
+    @classmethod
+    def _get_difficulty_info(cls, skill: str) -> Dict:
+        """Return difficulty rating info for a skill."""
+        level = cls.SKILL_DIFFICULTY.get(skill, 2)
+        return {
+            "level": level,
+            "label": cls.DIFFICULTY_LABELS.get(level, "Intermediate"),
+            "estimated_time": cls.DIFFICULTY_WEEKS.get(level, "2-4 weeks"),
+        }
+
+    @classmethod
+    def _get_missing_prerequisites(cls, skill: str, all_missing: set) -> List[str]:
+        """Return prerequisites for a skill that the candidate is also missing."""
+        prereqs = cls.SKILL_PREREQUISITES.get(skill, [])
+        return [p for p in prereqs if p in all_missing]
+
+    @classmethod
+    def _topological_sort_skills(cls, skills: List[str]) -> List[str]:
+        """Sort skills so prerequisites come before dependents."""
+        skill_set = set(skills)
+        sorted_list = []
+        visited = set()
+
+        def visit(skill):
+            if skill in visited:
+                return
+            visited.add(skill)
+            for prereq in cls.SKILL_PREREQUISITES.get(skill, []):
+                if prereq in skill_set:
+                    visit(prereq)
+            sorted_list.append(skill)
+
+        for s in skills:
+            visit(s)
+        return sorted_list
 
     # -----------------------------------------------------------------
     #  Generate Full Report
@@ -180,39 +265,39 @@ class ReportGenerator:
         }
 
         # --- Recommendations ---
-        # Generate actionable recommendations with urgency levels
+        # Generate actionable recommendations with prerequisite ordering
         recommendations = []
+        all_missing = set(analysis_result["missing_required"]) | set(analysis_result["missing_nice_to_have"])
 
-        # High-demand skills get "Urgent" priority, others get "Critical"
-        high_demand_skills = {
-            "Python", "JavaScript", "TypeScript", "React", "Node.js", "Docker",
-            "Kubernetes", "AWS", "GCP", "Azure", "SQL", "Git", "CI/CD",
-            "Machine Learning", "REST API", "TensorFlow", "PyTorch",
-            "Go", "Rust", "Java", "GraphQL", "Terraform",
-            "LLM", "Generative AI", "RAG", "LangChain",
-        }
+        # Sort required skills by prerequisite order (learn foundations first)
+        sorted_required = self._topological_sort_skills(analysis_result["missing_required"])
 
-        for skill in analysis_result["missing_required"]:
-            is_high_demand = skill in high_demand_skills
+        for skill in sorted_required:
+            difficulty = self._get_difficulty_info(skill)
+            missing_prereqs = self._get_missing_prerequisites(skill, all_missing)
             recommendations.append({
                 "skill": skill,
-                "priority": "Urgent" if is_high_demand else "Critical",
+                "priority": "Urgent",
                 "action": f"Learn {skill} -- required for {target_role}",
                 "resource_hint": self._get_resource_hint(skill),
-                "market_demand": "high" if is_high_demand else "standard",
+                "difficulty": difficulty["label"],
+                "estimated_time": difficulty["estimated_time"],
+                "learn_first": missing_prereqs if missing_prereqs else None,
             })
 
-        # Sort: Urgent first, then Critical
-        recommendations.sort(key=lambda r: 0 if r["priority"] == "Urgent" else 1)
-
         # Also add recommendations for missing nice-to-have skills (lower priority)
-        for skill in analysis_result["missing_nice_to_have"]:
+        sorted_nice = self._topological_sort_skills(analysis_result["missing_nice_to_have"])
+        for skill in sorted_nice:
+            difficulty = self._get_difficulty_info(skill)
+            missing_prereqs = self._get_missing_prerequisites(skill, all_missing)
             recommendations.append({
                 "skill": skill,
                 "priority": "Recommended",
                 "action": f"Consider learning {skill} -- nice to have for {target_role}",
                 "resource_hint": self._get_resource_hint(skill),
-                "market_demand": "high" if skill in high_demand_skills else "standard",
+                "difficulty": difficulty["label"],
+                "estimated_time": difficulty["estimated_time"],
+                "learn_first": missing_prereqs if missing_prereqs else None,
             })
 
         # --- ML Insights ---
@@ -290,19 +375,28 @@ class ReportGenerator:
             A list of dicts with skill, priority, and suggested_path.
         """
         learning_path = []
+        all_missing = set(missing_required) | set(missing_nice_to_have or [])
 
-        for skill in missing_required:
+        sorted_required = self._topological_sort_skills(missing_required)
+        for skill in sorted_required:
+            difficulty = self._get_difficulty_info(skill)
             learning_path.append({
                 "skill": skill,
                 "priority": "Critical",
                 "suggested_path": self._get_resource_hint(skill),
+                "difficulty": difficulty["label"],
+                "estimated_time": difficulty["estimated_time"],
             })
 
-        for skill in (missing_nice_to_have or []):
+        sorted_nice = self._topological_sort_skills(missing_nice_to_have or [])
+        for skill in sorted_nice:
+            difficulty = self._get_difficulty_info(skill)
             learning_path.append({
                 "skill": skill,
                 "priority": "Recommended",
                 "suggested_path": self._get_resource_hint(skill),
+                "difficulty": difficulty["label"],
+                "estimated_time": difficulty["estimated_time"],
             })
 
         logger.info(f"[ReportGenerator] Learning path with {len(learning_path)} items.")
