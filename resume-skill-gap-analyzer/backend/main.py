@@ -140,7 +140,7 @@ async def lifespan(app: FastAPI):
     state.github_analyzer = GitHubAnalyzer(github_token=GITHUB_TOKEN if GITHUB_TOKEN else None)
     state.feature_engineer = FeatureEngineer()
     state.ml_model = SkillGapMLModel()
-    state.skill_gap_analyzer = SkillGapAnalyzer()
+    state.skill_gap_analyzer = SkillGapAnalyzer(skills_master=state.skills_master)
     state.report_generator = ReportGenerator()
     state.dataset_loader = DatasetLoader()
     state.db = Database()

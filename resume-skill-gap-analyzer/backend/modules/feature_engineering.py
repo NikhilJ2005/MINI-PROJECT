@@ -28,14 +28,34 @@ import pandas as pd
 from loguru import logger
 
 
-# The 11 features used by the ML model (3 binary + 8 continuous)
+# The 13 features used by the ML model (3 binary + 10 continuous)
 FEATURE_NAMES = [
     "in_resume", "in_github", "is_required",
     "resume_skill_ratio", "github_skill_ratio",
     "skill_source_agreement", "resume_claim_density",
     "github_evidence_strength", "category_match_score",
     "skill_rarity_score", "profile_consistency_score",
+    "both_sources", "source_ratio_interaction",
 ]
+
+
+def _build_canonical_map(skills_master: Dict[str, List[str]]) -> Dict[str, str]:
+    """Build lowercase -> canonical name mapping from skills_master."""
+    canonical = {}
+    for category, skills in skills_master.items():
+        for skill in skills:
+            canonical[skill.lower()] = skill
+            cleaned = skill.lower().replace("-", " ").replace("_", " ")
+            canonical[cleaned] = skill
+    return canonical
+
+
+def _normalize_skill(skill: str, canonical_map: Dict[str, str]) -> str:
+    """Return the canonical form of a skill name, or the original if not found."""
+    if skill in canonical_map.values():
+        return skill
+    key = skill.lower().replace("-", " ").replace("_", " ").strip()
+    return canonical_map.get(skill.lower(), canonical_map.get(key, skill))
 
 
 class FeatureEngineer:
@@ -63,6 +83,14 @@ class FeatureEngineer:
         Each row represents one skill from the target role's requirements.
         Includes 11 features: 3 binary + 8 continuous profile/skill-level signals.
         """
+        # Normalize skill names to canonical form if skills_master provided
+        if skills_master:
+            cmap = _build_canonical_map(skills_master)
+            claimed_skills = [_normalize_skill(s, cmap) for s in claimed_skills]
+            demonstrated_skills = [_normalize_skill(s, cmap) for s in demonstrated_skills]
+            required_skills = [_normalize_skill(s, cmap) for s in required_skills]
+            nice_to_have_skills = [_normalize_skill(s, cmap) for s in nice_to_have_skills]
+
         claimed_set = set(claimed_skills)
         demonstrated_set = set(demonstrated_skills)
         all_role_skills = required_skills + nice_to_have_skills
@@ -161,11 +189,13 @@ class FeatureEngineer:
                 "category_match_score": round(cat_score, 4),
                 "skill_rarity_score": round(skill_rarity, 4),
                 "profile_consistency_score": round(profile_consistency_score, 4),
+                "both_sources": in_resume * in_github,
+                "source_ratio_interaction": round(resume_skill_ratio * github_skill_ratio, 4),
             })
 
         df = pd.DataFrame(rows)
         logger.debug(f"[FeatureEngineer] Created skill matrix with {len(df)} skills "
-                     f"(11 features per skill).")
+                     f"(13 features per skill).")
         return df
 
     # -----------------------------------------------------------------
@@ -186,5 +216,5 @@ class FeatureEngineer:
         # Label: whether the skill is "present" (found in at least one source)
         y = skill_matrix["combined"].copy()
 
-        logger.debug(f"[FeatureEngineer] Encoded {len(X)} samples for model (11 features).")
+        logger.debug(f"[FeatureEngineer] Encoded {len(X)} samples for model (13 features).")
         return X, y

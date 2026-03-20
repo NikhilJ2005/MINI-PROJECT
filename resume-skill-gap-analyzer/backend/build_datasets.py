@@ -123,19 +123,25 @@ def compute_profile_consistency(all_candidate_skills: set) -> float:
 # ---------------------------------------------------------------------------
 #  HuggingFace Download (best-effort, STREAMING to avoid OOM)
 # ---------------------------------------------------------------------------
-def _extract_skills_from_stream(ds_iter, text_fields, source_label, skill_patterns, max_records=5000):
+def _extract_skills_from_stream(ds_iter, text_fields, source_label, skill_patterns, max_records=8000):
     """Helper: stream through a HF dataset iterator, extract skills from text fields."""
     records = []
     count = 0
+    skipped = 0
     for row in ds_iter:
         if count >= max_records:
             break
-        text = ""
+        # Try all text fields, concatenate non-empty ones
+        text_parts = []
         for field in text_fields:
-            text = row.get(field, "") or ""
-            if text and len(text) > 30:
-                break
+            val = row.get(field, "") or ""
+            if val and len(val) > 20:
+                text_parts.append(val)
+        text = " ".join(text_parts)
         if not text or len(text) < 30:
+            skipped += 1
+            if skipped > max_records * 3:
+                break
             continue
         text_lower = text.lower()
         skills = [s for s, p in skill_patterns.items() if p.search(text_lower)]
@@ -145,8 +151,22 @@ def _extract_skills_from_stream(ds_iter, text_fields, source_label, skill_patter
     return records, count
 
 
+HF_CACHE_PATH = OUTPUT_DIR / "hf_cache" / "hf_raw_records.json"
+
+
 def try_load_hf_datasets() -> list:
     """Try to load real HF datasets using streaming to avoid OOM."""
+    # Try cache first
+    if HF_CACHE_PATH.exists():
+        try:
+            with open(HF_CACHE_PATH) as f:
+                cached = json.load(f)
+            if len(cached) > 100:
+                logger.info(f"Loaded {len(cached)} HF records from cache")
+                return cached
+        except Exception:
+            pass
+
     try:
         from datasets import load_dataset
     except ImportError:
@@ -171,12 +191,14 @@ def try_load_hf_datasets() -> list:
         ("Sachinkelenjaguri/Resume_dataset", ["Resume_str", "resume", "text"]),
         ("InferencePrince555/Resume-Dataset", ["Resume_str", "resume", "text", "content"]),
         ("ahmedheakl/resume-atlas", ["resume", "text", "content", "Resume_str"]),
+        ("cnamuangtoun/resume-job-description-fit", ["resume", "resume_text", "text"]),
+        ("alirezaismaeily/resume-dataset", ["resume", "Resume_str", "text", "content"]),
     ]
     for ds_name, fields in resume_datasets:
         try:
             logger.info(f"Loading {ds_name} (streaming)...")
             ds = load_dataset(ds_name, split="train", trust_remote_code=True, streaming=True)
-            new_recs, count = _extract_skills_from_stream(ds, fields, "resume", skill_patterns, 5000)
+            new_recs, count = _extract_skills_from_stream(ds, fields, "resume", skill_patterns, 8000)
             records.extend(new_recs)
             logger.info(f"  -> {count} resumes from {ds_name}")
         except Exception as e:
@@ -187,18 +209,28 @@ def try_load_hf_datasets() -> list:
         ("jacob-hugging-face/job-descriptions", ["job_description", "description", "text"]),
         ("Sachinkelenjaguri/Job-Description-Dataset", ["job_description", "description", "text", "Job Description"]),
         ("promptcloud/jobs-on-naukricom", ["jobdescription", "job_description", "description"]),
+        ("lukebarousse/data_jobs", ["job_description", "description", "text"]),
+        ("wjbmattingly/indeed-job-dataset", ["description", "text", "job_description"]),
     ]
     for ds_name, fields in jd_datasets:
         try:
             logger.info(f"Loading {ds_name} (streaming)...")
             ds = load_dataset(ds_name, split="train", trust_remote_code=True, streaming=True)
-            new_recs, count = _extract_skills_from_stream(ds, fields, "job_description", skill_patterns, 5000)
+            new_recs, count = _extract_skills_from_stream(ds, fields, "job_description", skill_patterns, 8000)
             records.extend(new_recs)
             logger.info(f"  -> {count} job descriptions from {ds_name}")
         except Exception as e:
             logger.warning(f"  -> Could not load {ds_name}: {e}")
 
     logger.info(f"Total HuggingFace records extracted: {len(records)}")
+
+    # Save to cache on success
+    if records:
+        HF_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(HF_CACHE_PATH, 'w') as f:
+            json.dump(records, f)
+        logger.info(f"Cached {len(records)} HF records to {HF_CACHE_PATH}")
+
     return records
 
 
@@ -517,6 +549,8 @@ def profiles_to_training_data(profiles: list) -> pd.DataFrame:
                 "category_match_score": round(cat_score, 4),
                 "skill_rarity_score": rarity,
                 "profile_consistency_score": pf["profile_consistency_score"],
+                "both_sources": in_resume * in_github,
+                "source_ratio_interaction": round(pf["resume_skill_ratio"] * pf["github_skill_ratio"], 4),
                 "label": label,
             })
 
@@ -569,17 +603,20 @@ def hf_records_to_training_data(records: list) -> pd.DataFrame:
                     rarity, profile_consistency, rng
                 )
 
+                gsr = round(resume_skill_ratio * (0.3 + pop * 0.4), 4)
                 rows.append({
                     "in_resume": 1, "in_github": in_github,
                     "is_required": is_req,
                     "resume_skill_ratio": round(resume_skill_ratio, 4),
-                    "github_skill_ratio": round(resume_skill_ratio * (0.3 + pop * 0.4), 4),
+                    "github_skill_ratio": gsr,
                     "skill_source_agreement": round(agreement, 4),
                     "resume_claim_density": round(density, 4),
                     "github_evidence_strength": round(github_evidence_strength, 4),
                     "category_match_score": round(cat_score, 4),
                     "skill_rarity_score": rarity,
                     "profile_consistency_score": profile_consistency,
+                    "both_sources": 1 * in_github,
+                    "source_ratio_interaction": round(resume_skill_ratio * gsr, 4),
                     "label": label,
                 })
             else:
@@ -605,17 +642,21 @@ def hf_records_to_training_data(records: list) -> pd.DataFrame:
                     rarity, profile_consistency, rng
                 )
 
+                rsr_jd = round(resume_skill_ratio * 0.8, 4)
+                gsr_jd = round(resume_skill_ratio * 0.4, 4)
                 rows.append({
                     "in_resume": in_r, "in_github": in_g,
                     "is_required": 1,
-                    "resume_skill_ratio": round(resume_skill_ratio * 0.8, 4),
-                    "github_skill_ratio": round(resume_skill_ratio * 0.4, 4),
+                    "resume_skill_ratio": rsr_jd,
+                    "github_skill_ratio": gsr_jd,
                     "skill_source_agreement": round(agreement, 4),
                     "resume_claim_density": round(density, 4),
                     "github_evidence_strength": round(github_evidence_strength, 4),
                     "category_match_score": round(cat_score, 4),
                     "skill_rarity_score": rarity,
                     "profile_consistency_score": profile_consistency,
+                    "both_sources": in_r * in_g,
+                    "source_ratio_interaction": round(rsr_jd * gsr_jd, 4),
                     "label": label,
                 })
 
@@ -629,17 +670,22 @@ def hf_records_to_training_data(records: list) -> pd.DataFrame:
                 0, 1 if github_chance else 0, 0.5, cat_score, 0.5,
                 rarity, profile_consistency, rng
             )
+            in_g_gap = 1 if github_chance else 0
+            rsr_gap = round(resume_skill_ratio * 0.3, 4)
+            gsr_gap = round(resume_skill_ratio * 0.1, 4)
             rows.append({
-                "in_resume": 0, "in_github": 1 if github_chance else 0,
+                "in_resume": 0, "in_github": in_g_gap,
                 "is_required": 1,
-                "resume_skill_ratio": round(resume_skill_ratio * 0.3, 4),
-                "github_skill_ratio": round(resume_skill_ratio * 0.1, 4),
+                "resume_skill_ratio": rsr_gap,
+                "github_skill_ratio": gsr_gap,
                 "skill_source_agreement": round(0.5 + rng.random() * 0.3, 4),
                 "resume_claim_density": round(0.4 + rng.random() * 0.3, 4),
                 "github_evidence_strength": round(github_evidence_strength, 4),
                 "category_match_score": round(cat_score, 4),
                 "skill_rarity_score": rarity,
                 "profile_consistency_score": profile_consistency,
+                "both_sources": 0,
+                "source_ratio_interaction": round(rsr_gap * gsr_gap, 4),
                 "label": label,
             })
 
@@ -665,7 +711,7 @@ def main():
 
     # --- Generate simulated candidate profiles ---
     logger.info("Generating simulated candidate profiles...")
-    profiles = generate_candidate_profiles(n_candidates=1500)
+    profiles = generate_candidate_profiles(n_candidates=500)
     profile_df = profiles_to_training_data(profiles)
     frames.append(profile_df)
     logger.info(f"Simulated profile data: {len(profile_df)} training rows")
@@ -675,6 +721,8 @@ def main():
     df = df.sample(frac=1.0, random_state=42).reset_index(drop=True)
 
     # Log stats
+    hf_ratio = (len(frames[0]) / len(df) * 100) if len(frames) > 1 else 0
+    logger.info(f"Data composition: {hf_ratio:.1f}% HuggingFace, {100-hf_ratio:.1f}% synthetic")
     logger.info(f"Total training rows: {len(df)}")
     logger.info(f"  Positive rate: {df['label'].mean():.1%}")
     feature_cols = [
@@ -683,6 +731,7 @@ def main():
         "skill_source_agreement", "resume_claim_density",
         "github_evidence_strength", "category_match_score",
         "skill_rarity_score", "profile_consistency_score",
+        "both_sources", "source_ratio_interaction",
     ]
     for col in feature_cols:
         logger.info(f"  {col}: mean={df[col].mean():.3f}")

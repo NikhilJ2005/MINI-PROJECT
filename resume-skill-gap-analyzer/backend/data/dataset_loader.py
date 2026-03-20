@@ -40,6 +40,7 @@ FEATURE_COLS = [
     'skill_source_agreement', 'resume_claim_density',
     'github_evidence_strength', 'category_match_score',
     'skill_rarity_score', 'profile_consistency_score',
+    'both_sources', 'source_ratio_interaction',
 ]
 
 
@@ -73,7 +74,7 @@ class DatasetLoader:
             logger.info(f"[DatasetLoader] Loaded {len(hf_df)} HuggingFace samples")
 
         # Always add synthetic data for augmentation
-        synthetic_size = 1500 if frames else 3000
+        synthetic_size = 500 if frames else 3000
         synthetic_df = self._generate_synthetic_data(n_samples=synthetic_size)
         frames.append(synthetic_df)
         sources.append(f"Synthetic ({len(synthetic_df)} samples)")
@@ -119,6 +120,12 @@ class DatasetLoader:
                     if col in ('skill_rarity_score', 'profile_consistency_score'):
                         df[col] = np.random.uniform(0.1, 0.8, size=len(df)).round(4)
                         logger.info(f"[DatasetLoader] Added missing column '{col}' with synthetic values")
+                    elif col == 'both_sources':
+                        df[col] = (df['in_resume'] * df['in_github']).astype(int)
+                        logger.info(f"[DatasetLoader] Computed missing column '{col}' from in_resume * in_github")
+                    elif col == 'source_ratio_interaction':
+                        df[col] = (df['resume_skill_ratio'] * df['github_skill_ratio']).round(4)
+                        logger.info(f"[DatasetLoader] Computed missing column '{col}' from ratios")
                     else:
                         logger.warning(f"[DatasetLoader] HF data file missing critical column '{col}', skipping")
                         return None
@@ -205,6 +212,8 @@ class DatasetLoader:
                 'category_match_score': round(cms, 4),
                 'skill_rarity_score': round(srs, 4),
                 'profile_consistency_score': round(pcs, 4),
+                'both_sources': in_r * in_g,
+                'source_ratio_interaction': round(rsr * gsr, 4),
                 'label': label,
             }
 

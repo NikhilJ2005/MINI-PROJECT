@@ -38,7 +38,7 @@ from sklearn.model_selection import (
     train_test_split,
 )
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
 # ---------------------------------------------------------------------
@@ -52,13 +52,14 @@ DT_WEIGHT = 0.55
 # Prediction threshold: above this = model says "candidate has skill"
 PREDICTION_THRESHOLD = 0.5
 
-# The 11 features our model uses for each skill (3 binary + 8 continuous)
+# The 13 features our model uses for each skill (3 binary + 10 continuous)
 FEATURE_NAMES = [
     'in_resume', 'in_github', 'is_required',
     'resume_skill_ratio', 'github_skill_ratio',
     'skill_source_agreement', 'resume_claim_density',
     'github_evidence_strength', 'category_match_score',
     'skill_rarity_score', 'profile_consistency_score',
+    'both_sources', 'source_ratio_interaction',
 ]
 
 
@@ -72,19 +73,20 @@ class SkillGapMLModel:
         Initialize both models with optimized hyperparameters.
         class_weight='balanced' handles imbalanced skill datasets.
         """
-        # Logistic Regression with StandardScaler for continuous features
+        # Logistic Regression with PolynomialFeatures for interaction learning
         self.lr_pipeline = Pipeline([
             ('scaler', StandardScaler()),
+            ('poly', PolynomialFeatures(degree=2, interaction_only=True, include_bias=False)),
             ('classifier', LogisticRegression(
-                C=2.0,
-                max_iter=2000,
+                C=1.5,
+                max_iter=3000,
                 random_state=42,
                 class_weight='balanced',
                 solver='lbfgs'
             ))
         ])
 
-        # Decision Tree — deep enough to leverage 11 features
+        # Decision Tree — tuned for 13 features
         self.dt_model = DecisionTreeClassifier(
             max_depth=15,
             min_samples_split=5,
@@ -261,7 +263,7 @@ class SkillGapMLModel:
     def get_feature_importance(self) -> Dict:
         """
         Feature importance from both models.
-        Shows which of the 11 features matter most for predictions.
+        Shows which features matter most for predictions.
         """
         if not self.is_trained:
             return {}
@@ -271,17 +273,23 @@ class SkillGapMLModel:
             [round(float(v), 4) for v in self.dt_model.feature_importances_]
         ))
 
-        lr_coefs = dict(zip(
-            self.FEATURE_NAMES,
-            [round(float(v), 4) for v in abs(self.lr_pipeline.named_steps['classifier'].coef_[0])]
-        ))
+        # LR coefficients are expanded by PolynomialFeatures — extract top ones
+        try:
+            poly = self.lr_pipeline.named_steps['poly']
+            poly_names = poly.get_feature_names_out(self.FEATURE_NAMES)
+            coefs = abs(self.lr_pipeline.named_steps['classifier'].coef_[0])
+            # Return only the top 20 most important coefficients for readability
+            coef_pairs = sorted(zip(poly_names, coefs), key=lambda x: -x[1])
+            lr_coefs = {name: round(float(val), 4) for name, val in coef_pairs[:20]}
+        except Exception:
+            lr_coefs = {}
 
         return {
             'dt_importance': dt_imp,
             'lr_coefficients': lr_coefs,
             'explanation': (
                 "DT importance: how often each feature splits the tree. "
-                "LR coefficients: how much each feature moves the probability."
+                "LR coefficients: how much each feature (including interactions) moves the probability."
             )
         }
 
