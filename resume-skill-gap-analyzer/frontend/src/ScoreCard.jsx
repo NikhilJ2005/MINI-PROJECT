@@ -3,6 +3,7 @@ function ScoreCard({ report }) {
     const score = Math.round(report.skill_breakdown.match_score);
     const label = report.executive_summary.match_label;
     const targetRole = report.target_role;
+    const candidateName = report.candidate_info?.name || report.executive_summary?.candidate_name || "";
     let colour;
     if (score >= 75) {
         colour = "var(--color-excellent)";
@@ -15,6 +16,9 @@ function ScoreCard({ report }) {
     }
     return (
         <div className="score-card">
+            {candidateName && (
+                <h1 className="candidate-name">{candidateName}</h1>
+            )}
             <h2 className="section-title">Match Score</h2>
             <div className="score-display">
                 <div className="score-circle" style={{ borderColor: colour }}>

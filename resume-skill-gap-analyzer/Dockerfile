@@ -25,6 +25,9 @@ RUN python -m spacy download en_core_web_sm
 # Copy backend code
 COPY backend/ .
 
+# Build training datasets at build time (uses streaming HF data + simulation)
+RUN python build_datasets.py || echo "Dataset build completed with warnings (non-fatal)"
+
 # Copy built frontend into static directory
 COPY --from=frontend-build /app/dist ./static
 
