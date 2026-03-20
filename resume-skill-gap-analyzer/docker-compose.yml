@@ -1,5 +1,5 @@
-version: "3.8"
-
+# Local development: frontend via nginx (port 5173), backend API (port 8000)
+# Production/Railway: uses root Dockerfile which bundles frontend into backend
 services:
   backend:
     build:
@@ -12,6 +12,16 @@ services:
     volumes:
       - ./backend/data:/app/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   frontend:
     build:
@@ -20,5 +30,10 @@ services:
     ports:
       - "5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M

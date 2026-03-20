@@ -40,3 +40,6 @@ slowapi
 
 # --- HuggingFace Datasets (build-time data processing) ---
 datasets
+
+# --- Testing ---
+pytest

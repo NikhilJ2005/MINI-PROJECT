@@ -248,7 +248,7 @@ function BatchUpload() {
               link.href = url;
               link.download = `batch_${result.target_role}_${new Date().toISOString().slice(0, 10)}.csv`;
               link.click();
-              URL.revokeObjectURL(url);
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
               showToast("Batch CSV exported!", "success");
             }}>Export CSV</button>
           </div>

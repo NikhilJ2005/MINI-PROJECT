@@ -67,8 +67,8 @@ const AnalysisHistory = memo(function AnalysisHistory({
         const report = await res.json();
         onSelect(report, analysisId);
       }
-    } catch {
-      // Silently fail
+    } catch (err) {
+      console.error("Failed to load analysis:", err);
     } finally {
       setLoadingId(null);
     }
@@ -124,10 +124,12 @@ const AnalysisHistory = memo(function AnalysisHistory({
                       </span>
                     </div>
                     <div className="history-entry-time">
-                      {new Date(a.analyzed_at * 1000).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {a.analyzed_at
+                        ? new Date(a.analyzed_at * 1000).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—"}
                     </div>
                   </div>
                 ))}

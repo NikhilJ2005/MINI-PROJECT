@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -194,7 +194,7 @@ if _env_origins == "*":
 elif _env_origins:
     cors_origins = list(set(_default_origins + _env_origins.split(",")))
 else:
-    cors_origins = ["*"]
+    cors_origins = _default_origins
 
 app.add_middleware(
     CORSMiddleware,
@@ -220,19 +220,19 @@ async def add_security_headers(request, call_next):
 #  Pydantic Models
 # ---------------------------------------------------------------------------
 class TextAnalyzeRequest(BaseModel):
-    resume_text: str
-    github_username: str
-    target_role: str
+    resume_text: str = Field(max_length=500_000)
+    github_username: str = Field(max_length=39)
+    target_role: str = Field(max_length=200)
 
 
 class CompareRequest(BaseModel):
     candidate_ids: List[int]
-    target_role: str
+    target_role: str = Field(max_length=200)
 
 
 class JobDescriptionRequest(BaseModel):
-    description: str
-    role_name: str = ""
+    description: str = Field(max_length=100_000)
+    role_name: str = Field(default="", max_length=200)
 
 
 # ---------------------------------------------------------------------------
@@ -565,27 +565,28 @@ async def analyze(
 #  ENDPOINT: Analyze Text (No File Upload)
 # ---------------------------------------------------------------------------
 @app.post("/analyze-text")
-async def analyze_text(request: TextAnalyzeRequest):
-    logger.info(f"TEXT ANALYSIS | GitHub: {request.github_username} | Role: {request.target_role}")
+@limiter.limit("10/minute")
+async def analyze_text(request: Request, body: TextAnalyzeRequest):
+    logger.info(f"TEXT ANALYSIS | GitHub: {body.github_username} | Role: {body.target_role}")
 
-    if request.target_role not in state.job_roles_data:
-        raise HTTPException(400, f"Unknown role: '{request.target_role}'.")
-    if not request.resume_text.strip():
+    if body.target_role not in state.job_roles_data:
+        raise HTTPException(400, f"Unknown role: '{body.target_role}'.")
+    if not body.resume_text.strip():
         raise HTTPException(400, "Resume text cannot be empty.")
 
-    claimed_skills = state.resume_parser.extract_skills(request.resume_text, state.skills_master)
-    personal_info = state.resume_parser.extract_personal_info(request.resume_text)
+    claimed_skills = state.resume_parser.extract_skills(body.resume_text, state.skills_master)
+    personal_info = state.resume_parser.extract_personal_info(body.resume_text)
 
-    github_username = request.github_username
+    github_username = body.github_username
     if not github_username and personal_info.get("github_username"):
         github_username = personal_info["github_username"]
 
     try:
         result = await _run_single_analysis(
-            resume_text=request.resume_text,
+            resume_text=body.resume_text,
             claimed_skills=claimed_skills,
             github_username=github_username,
-            target_role=request.target_role,
+            target_role=body.target_role,
             personal_info=personal_info,
         )
     except Exception as e:
@@ -600,13 +601,13 @@ async def analyze_text(request: TextAnalyzeRequest):
         "github_username": github_username,
         "github_url": personal_info.get("github_url", ""),
         "linkedin_url": personal_info.get("linkedin_url", ""),
-        "resume_text": request.resume_text,
+        "resume_text": body.resume_text,
         "extracted_skills": claimed_skills,
     })
 
     analysis_id = state.db.insert_analysis({
         "candidate_id": candidate_id,
-        "target_role": request.target_role,
+        "target_role": body.target_role,
         "match_score": result["analysis"]["match_score"],
         "gap_score": result["analysis"]["gap_score"],
         "confidence": result["analysis"]["confidence"],
@@ -816,20 +817,21 @@ async def get_rankings(target_role: str, limit: int = 50):
 #  ENDPOINT: Compare Candidates Side-by-Side
 # ---------------------------------------------------------------------------
 @app.post("/compare")
-async def compare_candidates(request: CompareRequest):
-    if len(request.candidate_ids) < 2:
+@limiter.limit("15/minute")
+async def compare_candidates(request: Request, body: CompareRequest):
+    if len(body.candidate_ids) < 2:
         raise HTTPException(400, "Provide at least 2 candidate IDs.")
-    if len(request.candidate_ids) > 5:
+    if len(body.candidate_ids) > 5:
         raise HTTPException(400, "Maximum 5 candidates for comparison.")
-    if request.target_role not in state.job_roles_data:
-        raise HTTPException(400, f"Unknown role: '{request.target_role}'.")
+    if body.target_role not in state.job_roles_data:
+        raise HTTPException(400, f"Unknown role: '{body.target_role}'.")
 
     comparisons = state.db.get_candidates_comparison(
-        request.candidate_ids, request.target_role
+        body.candidate_ids, body.target_role
     )
 
     # Build comparison matrix
-    role_data = state.job_roles_data[request.target_role]
+    role_data = state.job_roles_data[body.target_role]
     all_skills = role_data["required_skills"] + role_data.get("nice_to_have", [])
 
     skill_matrix = {}
@@ -852,7 +854,7 @@ async def compare_candidates(request: CompareRequest):
             skill_matrix[skill][str(cid)] = status
 
     return {
-        "target_role": request.target_role,
+        "target_role": body.target_role,
         "candidates": comparisons,
         "skill_matrix": skill_matrix,
         "required_skills": role_data["required_skills"],
@@ -864,15 +866,16 @@ async def compare_candidates(request: CompareRequest):
 #  ENDPOINT: Parse Job Description
 # ---------------------------------------------------------------------------
 @app.post("/parse-job-description")
-async def parse_job_description(request: JobDescriptionRequest):
+@limiter.limit("10/minute")
+async def parse_job_description(request: Request, body: JobDescriptionRequest):
     """
     Parse a job description text to auto-extract required skills.
     Can be used to create custom roles on-the-fly.
     """
-    if not request.description.strip():
+    if not body.description.strip():
         raise HTTPException(400, "Job description cannot be empty.")
 
-    text = request.description
+    text = body.description
     text_lower = text.lower()
 
     # Find skills mentioned in the JD using pre-compiled patterns
@@ -926,7 +929,7 @@ async def parse_job_description(request: JobDescriptionRequest):
         else:
             required_skills.append(skill)
 
-    role_name = request.role_name or "Custom Role"
+    role_name = body.role_name or "Custom Role"
 
     if role_name and required_skills:
         state.job_roles_data[role_name] = {
@@ -1321,8 +1324,8 @@ if os.path.isdir(static_dir):
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         """Catch-all: serve index.html for React SPA routing."""
-        file_path = os.path.join(static_dir, full_path)
-        if os.path.isfile(file_path):
+        file_path = os.path.realpath(os.path.join(static_dir, full_path))
+        if file_path.startswith(os.path.realpath(static_dir)) and os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(static_dir, "index.html"))
 
