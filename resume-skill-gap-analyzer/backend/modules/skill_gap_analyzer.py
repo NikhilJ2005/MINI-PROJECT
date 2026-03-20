@@ -21,11 +21,31 @@ import pandas as pd
 from loguru import logger
 
 
+def _build_canonical_map(skills_master: Dict[str, List[str]]) -> Dict[str, str]:
+    """Build lowercase -> canonical name mapping from skills_master."""
+    canonical = {}
+    for category, skills in skills_master.items():
+        for skill in skills:
+            canonical[skill.lower()] = skill
+            cleaned = skill.lower().replace("-", " ").replace("_", " ")
+            canonical[cleaned] = skill
+    return canonical
+
+
+def _normalize_skill(skill: str, canonical_map: Dict[str, str]) -> str:
+    """Return the canonical form of a skill name, or the original if not found."""
+    if skill in canonical_map.values():
+        return skill
+    key = skill.lower().replace("-", " ").replace("_", " ").strip()
+    return canonical_map.get(skill.lower(), canonical_map.get(key, skill))
+
+
 class SkillGapAnalyzer:
     """Computes skill gaps between a candidate's profile and a target job role."""
 
-    def __init__(self) -> None:
+    def __init__(self, skills_master: Dict[str, List[str]] = None) -> None:
         """Initialize the skill gap analyzer."""
+        self._canonical_map = _build_canonical_map(skills_master) if skills_master else {}
         logger.info("[SkillGapAnalyzer] Initialized.")
 
     # -----------------------------------------------------------------
@@ -77,6 +97,13 @@ class SkillGapAnalyzer:
         role_data = job_roles_data.get(target_role, {})
         required_skills = role_data.get("required_skills", [])
         nice_to_have = role_data.get("nice_to_have", [])
+
+        # --- Step 1b: Normalize all skill lists to canonical names ---
+        if self._canonical_map:
+            claimed_skills = [_normalize_skill(s, self._canonical_map) for s in claimed_skills]
+            demonstrated_skills = [_normalize_skill(s, self._canonical_map) for s in demonstrated_skills]
+            required_skills = [_normalize_skill(s, self._canonical_map) for s in required_skills]
+            nice_to_have = [_normalize_skill(s, self._canonical_map) for s in nice_to_have]
 
         # --- Step 2: Build the combined skill set ---
         # Union of everything the candidate has shown in any source

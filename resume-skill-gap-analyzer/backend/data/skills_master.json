@@ -26,7 +26,8 @@
     "CrewAI", "AutoGen", "Haystack",
     "Streamlit", "Gradio", "Panel",
     "XGBoost", "LightGBM", "CatBoost",
-    "Langfuse", "Weights & Biases", "Neptune"
+    "Langfuse", "Weights & Biases", "Neptune",
+    "Jetpack Compose", "Redux"
   ],
   "tools": [
     "Git", "Docker", "Kubernetes", "Jenkins", "Terraform", "Ansible",
@@ -52,7 +53,8 @@
     "OpenTelemetry", "Jaeger", "Zipkin",
     "DVC", "Kubeflow", "Vertex AI",
     "Ollama", "vLLM", "TensorRT",
-    "Cursor", "Copilot", "Claude Code"
+    "Cursor", "Copilot", "Claude Code",
+    "Jupyter", "Excel"
   ],
   "cloud": [
     "AWS", "Azure", "GCP", "Heroku", "Vercel", "Firebase", "DigitalOcean",
@@ -110,6 +112,7 @@
     "Zero Trust", "Service Mesh", "API Gateway",
     "Edge Computing", "WebAssembly", "WebRTC",
     "A/B Testing", "Feature Flags", "Experimentation",
-    "Platform Engineering", "Developer Experience", "Internal Tools"
+    "Platform Engineering", "Developer Experience", "Internal Tools",
+    "Markdown"
   ]
 }
