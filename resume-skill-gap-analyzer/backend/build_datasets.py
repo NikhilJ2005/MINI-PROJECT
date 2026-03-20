@@ -123,6 +123,28 @@ def compute_profile_consistency(all_candidate_skills: set) -> float:
 # ---------------------------------------------------------------------------
 #  HuggingFace Download (best-effort, STREAMING to avoid OOM)
 # ---------------------------------------------------------------------------
+def _extract_skills_from_stream(ds_iter, text_fields, source_label, skill_patterns, max_records=5000):
+    """Helper: stream through a HF dataset iterator, extract skills from text fields."""
+    records = []
+    count = 0
+    for row in ds_iter:
+        if count >= max_records:
+            break
+        text = ""
+        for field in text_fields:
+            text = row.get(field, "") or ""
+            if text and len(text) > 30:
+                break
+        if not text or len(text) < 30:
+            continue
+        text_lower = text.lower()
+        skills = [s for s, p in skill_patterns.items() if p.search(text_lower)]
+        if skills:
+            records.append({"source": source_label, "skills": skills})
+            count += 1
+    return records, count
+
+
 def try_load_hf_datasets() -> list:
     """Try to load real HF datasets using streaming to avoid OOM."""
     try:
@@ -144,56 +166,39 @@ def try_load_hf_datasets() -> list:
         else:
             skill_patterns[skill] = re.compile(r"\b" + escaped + r"\b")
 
-    # --- Resume dataset (streaming to avoid OOM) ---
-    try:
-        logger.info("Loading Resume dataset from HuggingFace (streaming)...")
-        ds = load_dataset(
-            "Sachinkelenjaguri/Resume_dataset",
-            split="train",
-            trust_remote_code=True,
-            streaming=True,
-        )
-        count = 0
-        max_records = 5000  # Cap to avoid excessive memory use
-        for row in ds:
-            if count >= max_records:
-                break
-            text = row.get("Resume_str", "") or row.get("resume", "") or ""
-            if text and len(text) > 50:
-                text_lower = text.lower()
-                skills = [s for s, p in skill_patterns.items() if p.search(text_lower)]
-                if skills:
-                    records.append({"source": "resume", "skills": skills})
-                    count += 1
-        logger.info(f"Loaded {count} resumes from HuggingFace (streaming)")
-    except Exception as e:
-        logger.warning(f"Could not load Resume_dataset: {e}")
+    # ---- Resume Datasets (multiple sources for redundancy) ----
+    resume_datasets = [
+        ("Sachinkelenjaguri/Resume_dataset", ["Resume_str", "resume", "text"]),
+        ("InferencePrince555/Resume-Dataset", ["Resume_str", "resume", "text", "content"]),
+        ("ahmedheakl/resume-atlas", ["resume", "text", "content", "Resume_str"]),
+    ]
+    for ds_name, fields in resume_datasets:
+        try:
+            logger.info(f"Loading {ds_name} (streaming)...")
+            ds = load_dataset(ds_name, split="train", trust_remote_code=True, streaming=True)
+            new_recs, count = _extract_skills_from_stream(ds, fields, "resume", skill_patterns, 5000)
+            records.extend(new_recs)
+            logger.info(f"  -> {count} resumes from {ds_name}")
+        except Exception as e:
+            logger.warning(f"  -> Could not load {ds_name}: {e}")
 
-    # --- Job descriptions (streaming to avoid OOM) ---
-    try:
-        logger.info("Loading Job descriptions from HuggingFace (streaming)...")
-        ds2 = load_dataset(
-            "jacob-hugging-face/job-descriptions",
-            split="train",
-            trust_remote_code=True,
-            streaming=True,
-        )
-        count = 0
-        max_records = 5000
-        for row in ds2:
-            if count >= max_records:
-                break
-            text = row.get("job_description", "") or row.get("description", "") or ""
-            if text and len(text) > 30:
-                text_lower = text.lower()
-                skills = [s for s, p in skill_patterns.items() if p.search(text_lower)]
-                if skills:
-                    records.append({"source": "job_description", "skills": skills})
-                    count += 1
-        logger.info(f"Loaded {count} job descriptions from HuggingFace (streaming)")
-    except Exception as e:
-        logger.warning(f"Could not load job-descriptions: {e}")
+    # ---- Job Description Datasets (multiple sources) ----
+    jd_datasets = [
+        ("jacob-hugging-face/job-descriptions", ["job_description", "description", "text"]),
+        ("Sachinkelenjaguri/Job-Description-Dataset", ["job_description", "description", "text", "Job Description"]),
+        ("promptcloud/jobs-on-naukricom", ["jobdescription", "job_description", "description"]),
+    ]
+    for ds_name, fields in jd_datasets:
+        try:
+            logger.info(f"Loading {ds_name} (streaming)...")
+            ds = load_dataset(ds_name, split="train", trust_remote_code=True, streaming=True)
+            new_recs, count = _extract_skills_from_stream(ds, fields, "job_description", skill_patterns, 5000)
+            records.extend(new_recs)
+            logger.info(f"  -> {count} job descriptions from {ds_name}")
+        except Exception as e:
+            logger.warning(f"  -> Could not load {ds_name}: {e}")
 
+    logger.info(f"Total HuggingFace records extracted: {len(records)}")
     return records
 
 
@@ -660,7 +665,7 @@ def main():
 
     # --- Generate simulated candidate profiles ---
     logger.info("Generating simulated candidate profiles...")
-    profiles = generate_candidate_profiles(n_candidates=1200)
+    profiles = generate_candidate_profiles(n_candidates=1500)
     profile_df = profiles_to_training_data(profiles)
     frames.append(profile_df)
     logger.info(f"Simulated profile data: {len(profile_df)} training rows")

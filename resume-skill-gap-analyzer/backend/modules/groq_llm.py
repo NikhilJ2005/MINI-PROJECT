@@ -414,17 +414,20 @@ def generate_skill_credibility_assessment(
         "Analyze the resume text to assess how credible each unverified skill claim is. "
         "Look for contextual evidence: project descriptions, experience duration, "
         "specific version numbers, concrete accomplishments, and related skill clusters. "
-        "Return a JSON object with keys: "
-        "'skill_scores' (object mapping each skill name to an object with: "
-        "  'credibility' (0.0-1.0 score), "
-        "  'evidence' (brief text explaining why you gave that score), "
-        "  'recommendation' ('accept'/'verify'/'skeptical')), "
-        "'overall_resume_credibility' (0.0-1.0 overall credibility score), "
-        "'credibility_summary' (1-2 sentence summary of overall credibility assessment)."
+        "Return a JSON object with EXACTLY these keys: "
+        "'overall_credibility_score' (integer 1-10 rating of overall resume credibility), "
+        "'assessment' (1-2 sentence summary of overall credibility assessment), "
+        "'verified_skills' (array of skill name strings that appear credible based on resume context — "
+        "skills with strong project evidence, version numbers, or detailed accomplishments), "
+        "'questionable_skills' (array of skill name strings that lack sufficient evidence — "
+        "skills mentioned without context, projects, or detail), "
+        "'recommendations' (array of 2-4 actionable string recommendations for how to verify "
+        "the questionable skills during the interview process)."
     )
     user_prompt = (
         f"Skills confirmed on GitHub: {', '.join(demonstrated_skills[:15])}\n"
         f"Skills ONLY on resume (unverified): {', '.join(claims_not_proven[:12])}\n"
+        f"All claimed skills: {', '.join(claimed_skills[:20])}\n"
         f"Resume text:\n{resume_text[:3500]}"
     )
 
@@ -434,9 +437,16 @@ def generate_skill_credibility_assessment(
 
     try:
         data = json.loads(result)
-        if not _validate_response(data, ["skill_scores"]):
+        if not _validate_response(data, ["overall_credibility_score", "assessment"]):
             logger.warning("[GroqLLM] Skill credibility response missing required keys")
             return None
+        # Ensure arrays exist even if LLM omitted them
+        if "verified_skills" not in data:
+            data["verified_skills"] = []
+        if "questionable_skills" not in data:
+            data["questionable_skills"] = []
+        if "recommendations" not in data:
+            data["recommendations"] = []
         logger.info(f"[GroqLLM] Generated skill credibility assessment for {len(claims_not_proven)} skills")
         return data
     except json.JSONDecodeError:
@@ -473,17 +483,19 @@ def generate_role_fit_narrative(
         github_context = f"\nGitHub: {repos} repos, top languages: {', '.join(langs)}"
 
     system_prompt = (
-        "You are a talent analytics specialist. Write a comprehensive role-fit narrative "
+        "You are a talent analytics specialist. Write a comprehensive role-fit analysis "
         "that explains the candidate's fit for the role in detail. Go beyond listing skills -- "
         "analyze patterns, identify strengths, and explain gaps in context. "
-        "Return a JSON object with keys: "
-        "'fit_score_explanation' (2-3 sentences explaining what the match score means in practice), "
-        "'strengths_narrative' (paragraph highlighting why the candidate's strengths matter for this role), "
-        "'gaps_narrative' (paragraph explaining the significance of missing skills and how critical each gap is), "
-        "'growth_potential' ('High'/'Medium'/'Low' with 1 sentence justification), "
-        "'team_role_suggestion' (what specific team role/responsibilities would suit this candidate), "
-        "'comparison_to_ideal' (how this candidate compares to an ideal hire for this role, 2-3 sentences), "
-        "'next_steps' (array of 2-3 concrete next steps for the hiring process)."
+        "Return a JSON object with EXACTLY these keys: "
+        "'fit_score' (integer 1-10 rating of overall role fit, where 10 is perfect fit), "
+        "'narrative' (2-3 sentence explanation of what the match score means in practice "
+        "and how well the candidate fits this specific role), "
+        "'standout_qualities' (array of 3-5 short string descriptions of the candidate's "
+        "most impressive qualities relevant to this role — e.g. 'Strong React ecosystem experience'), "
+        "'growth_areas' (array of 2-4 short string descriptions of areas where the candidate "
+        "needs development — e.g. 'Database design and SQL optimization'), "
+        "'onboarding_estimate' (string estimating ramp-up time — e.g. '2-4 weeks for core tasks, "
+        "2-3 months for full productivity')."
     )
     user_prompt = (
         f"Target Role: {target_role}\n"
@@ -501,9 +513,16 @@ def generate_role_fit_narrative(
 
     try:
         data = json.loads(result)
-        if not _validate_response(data, ["fit_score_explanation", "strengths_narrative"]):
+        if not _validate_response(data, ["fit_score", "narrative"]):
             logger.warning("[GroqLLM] Role-fit narrative response missing required keys")
             return None
+        # Ensure arrays exist even if LLM omitted them
+        if "standout_qualities" not in data:
+            data["standout_qualities"] = []
+        if "growth_areas" not in data:
+            data["growth_areas"] = []
+        if "onboarding_estimate" not in data:
+            data["onboarding_estimate"] = ""
         logger.info("[GroqLLM] Generated role-fit narrative")
         return data
     except json.JSONDecodeError:

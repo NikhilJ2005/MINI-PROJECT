@@ -13,6 +13,19 @@
     border: 1px solid var(--border-light);
 }
 
+.candidate-name {
+    font-size: 1.75rem;
+    font-weight: 800;
+    font-family: var(--font-heading);
+    color: var(--text-dark);
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+    background: var(--gradient-primary, linear-gradient(135deg, #6366f1, #8b5cf6));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
 .score-display {
     margin: 20px 0;
     animation: scoreAppear 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
