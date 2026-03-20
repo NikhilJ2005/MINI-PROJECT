@@ -177,6 +177,127 @@ h4 {
   text-align: right;
 }
 
+/* --- Recommendation Meta (difficulty, time, prerequisites) --- */
+.recommendation-meta {
+  display: flex;
+  gap: var(--space-2);
+  margin: 4px 0;
+  flex-wrap: wrap;
+}
+
+.rec-difficulty,
+.rec-time {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.rec-difficulty {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.rec-time {
+  background: var(--surface-2);
+  color: var(--text-gray);
+}
+
+.rec-prereqs {
+  font-size: 0.82rem;
+  color: var(--text-gray);
+  font-style: italic;
+  margin: 2px 0;
+}
+
+[data-theme="dark"] .rec-difficulty {
+  background: rgba(91, 33, 182, 0.2);
+  color: #c4b5fd;
+}
+
+/* --- Skill Learning Path Section --- */
+.learning-path-section {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: var(--shadow-md);
+  margin-bottom: var(--space-6);
+  text-align: left;
+  border: 1px solid var(--border-light);
+  border-left: 4px solid var(--primary);
+}
+
+.learning-path-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.learning-path-card {
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-light);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.learning-path-card:hover {
+  transform: translateX(4px);
+  box-shadow: var(--shadow-md);
+}
+
+.lp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.lp-skill {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-dark);
+}
+
+.lp-meta {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.lp-difficulty,
+.lp-time {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.lp-difficulty {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.lp-time {
+  background: var(--surface-2);
+  color: var(--text-gray);
+}
+
+.lp-path {
+  font-size: 0.88rem;
+  color: var(--text-gray);
+  line-height: 1.4;
+}
+
+[data-theme="dark"] .lp-difficulty {
+  background: rgba(91, 33, 182, 0.2);
+  color: #c4b5fd;
+}
+
 /* --- AI-Powered Sections --- */
 .ai-feedback-section,
 .ai-interview-section,

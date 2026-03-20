@@ -102,11 +102,21 @@ def _cache_set(key: str, value: str):
         _cache.popitem(last=False)
 
 
-def _validate_response(data: Any, required_keys: List[str]) -> bool:
-    """Validate that the parsed JSON response contains expected keys."""
+def _validate_response(
+    data: Any,
+    required_keys: List[str],
+    type_hints: Optional[Dict[str, type]] = None,
+) -> bool:
+    """Validate that the parsed JSON response contains expected keys and types."""
     if not isinstance(data, dict):
         return False
-    return all(k in data for k in required_keys)
+    if not all(k in data for k in required_keys):
+        return False
+    if type_hints:
+        for key, expected_type in type_hints.items():
+            if key in data and not isinstance(data[key], expected_type):
+                return False
+    return True
 
 
 def _llm_call(
@@ -211,12 +221,10 @@ def extract_skills_with_llm(resume_text: str, known_skills: List[str]) -> List[s
 
     try:
         data = json.loads(result)
-        if not _validate_response(data, ["skills"]):
-            logger.warning("[GroqLLM] Skill extraction response missing 'skills' key")
+        if not _validate_response(data, ["skills"], {"skills": list}):
+            logger.warning("[GroqLLM] Skill extraction response missing or invalid 'skills' key")
             return []
         llm_skills = data.get("skills", [])
-        if not isinstance(llm_skills, list):
-            return []
         # Return only skills not already found by regex
         new_skills = [s for s in llm_skills if isinstance(s, str) and s not in known_skills]
         logger.info(f"[GroqLLM] Extracted {len(new_skills)} additional skills via LLM")
@@ -268,7 +276,7 @@ def generate_ai_feedback(
 
     try:
         data = json.loads(result)
-        if not _validate_response(data, ["resume_tips", "overall_advice"]):
+        if not _validate_response(data, ["resume_tips", "overall_advice"], {"resume_tips": list}):
             logger.warning("[GroqLLM] AI feedback response missing required keys")
             return None
         logger.info("[GroqLLM] Generated AI resume feedback")
@@ -320,7 +328,7 @@ def generate_interview_questions(
 
     try:
         data = json.loads(result)
-        if not _validate_response(data, ["questions"]):
+        if not _validate_response(data, ["questions"], {"questions": list}):
             logger.warning("[GroqLLM] Interview questions response missing 'questions' key")
             return None
         questions = data.get("questions", [])
@@ -374,7 +382,7 @@ def generate_learning_path(
 
     try:
         data = json.loads(result)
-        if not _validate_response(data, ["learning_path"]):
+        if not _validate_response(data, ["learning_path"], {"learning_path": list}):
             logger.warning("[GroqLLM] Learning path response missing 'learning_path' key")
             return None
         path = data.get("learning_path", [])
@@ -680,7 +688,7 @@ def generate_jd_skills_extraction(
 
     try:
         data = json.loads(result)
-        if not _validate_response(data, ["required_skills"]):
+        if not _validate_response(data, ["required_skills"], {"required_skills": list}):
             logger.warning("[GroqLLM] JD extraction response missing required keys")
             return None
         logger.info(f"[GroqLLM] Extracted skills from JD: "
