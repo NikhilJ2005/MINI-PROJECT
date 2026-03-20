@@ -218,6 +218,46 @@ class TestReportGenerator:
         skills_order = [p["skill"] for p in path if p["priority"] == "Critical"]
         assert skills_order.index("Docker") < skills_order.index("Kubernetes")
 
+    def test_topological_sort_deep_chain(self):
+        """Deep Learning → Machine Learning → Python chain should be ordered."""
+        skills = ["Deep Learning", "Machine Learning", "Python"]
+        sorted_skills = ReportGenerator._topological_sort_skills(skills)
+        py_idx = sorted_skills.index("Python")
+        ml_idx = sorted_skills.index("Machine Learning")
+        dl_idx = sorted_skills.index("Deep Learning")
+        assert py_idx < ml_idx < dl_idx
+
+    def test_empty_missing_skills(self):
+        """No missing skills should produce an empty learning path."""
+        rg = ReportGenerator()
+        path = rg.generate_learning_path([], [])
+        assert path == []
+
+    def test_unknown_skill_gets_default_difficulty(self):
+        """Skills not in SKILL_DIFFICULTY should default to level 2 (Intermediate)."""
+        info = ReportGenerator._get_difficulty_info("SomeObscureFramework")
+        assert info["level"] == 2
+        assert info["label"] == "Intermediate"
+        assert info["estimated_time"] == "2-4 weeks"
+
+    def test_learning_path_item_fields(self):
+        """Each learning path item should have all required fields."""
+        rg = ReportGenerator()
+        path = rg.generate_learning_path(["Docker"], ["TypeScript"])
+        for item in path:
+            assert "skill" in item
+            assert "priority" in item
+            assert "suggested_path" in item
+            assert "difficulty" in item
+            assert "estimated_time" in item
+            assert item["priority"] in ("Critical", "Recommended")
+
+    def test_missing_prerequisites_for_advanced_skill(self):
+        """Advanced skills should report missing prereqs from the missing set."""
+        all_missing = {"Deep Learning", "Machine Learning", "Python"}
+        prereqs = ReportGenerator._get_missing_prerequisites("Deep Learning", all_missing)
+        assert "Machine Learning" in prereqs
+
 
 # ================================================================
 #  5. Skill Gap Analyzer Tests
