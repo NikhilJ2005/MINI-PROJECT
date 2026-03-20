@@ -152,10 +152,13 @@ function CandidatesList() {
               <div className="skills-list">
                 <strong>Extracted Skills:</strong>
                 <div className="skill-tags">
-                  {(typeof detail.candidate.extracted_skills === "string"
-                    ? JSON.parse(detail.candidate.extracted_skills)
-                    : detail.candidate.extracted_skills
-                  ).map((s, i) => (
+                  {(() => {
+                    try {
+                      return typeof detail.candidate.extracted_skills === "string"
+                        ? JSON.parse(detail.candidate.extracted_skills)
+                        : (detail.candidate.extracted_skills || []);
+                    } catch { return []; }
+                  })().map((s, i) => (
                     <span className="skill-tag" key={i}>{s}</span>
                   ))}
                 </div>

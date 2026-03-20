@@ -46,8 +46,8 @@ from sklearn.tree import DecisionTreeClassifier
 # ---------------------------------------------------------------------
 # Ensemble weights: LR provides calibrated probabilities,
 # DT adds explainability with tree-based splits
-LR_WEIGHT = 0.45
-DT_WEIGHT = 0.55
+LR_WEIGHT = 0.35
+DT_WEIGHT = 0.65
 
 # Prediction threshold: above this = model says "candidate has skill"
 PREDICTION_THRESHOLD = 0.5

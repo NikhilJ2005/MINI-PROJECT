@@ -12,6 +12,7 @@ function groupByDate(analyses) {
   const groups = { Today: [], Yesterday: [], "This Week": [], Earlier: [] };
 
   for (const a of analyses) {
+    if (!a.analyzed_at) { groups.Earlier.push(a); continue; }
     const d = new Date(a.analyzed_at * 1000);
     const ds = d.toDateString();
     if (ds === today) groups.Today.push(a);
@@ -39,6 +40,7 @@ const AnalysisHistory = memo(function AnalysisHistory({
 }) {
   const [analyses, setAnalyses] = useState([]);
   const [loadingId, setLoadingId] = useState(null);
+  const [fetchError, setFetchError] = useState(false);
 
   useEffect(() => {
     fetchHistory();
@@ -52,7 +54,7 @@ const AnalysisHistory = memo(function AnalysisHistory({
         setAnalyses(data.analyses || []);
       }
     } catch {
-      // Silently fail — sidebar is non-critical
+      setFetchError(true);
     }
   }
 
@@ -92,7 +94,9 @@ const AnalysisHistory = memo(function AnalysisHistory({
           </button>
         </div>
 
-        {analyses.length === 0 ? (
+        {fetchError ? (
+          <p className="history-empty">Could not load history.</p>
+        ) : analyses.length === 0 ? (
           <p className="history-empty">No analyses yet.</p>
         ) : (
           <div className="history-list">
