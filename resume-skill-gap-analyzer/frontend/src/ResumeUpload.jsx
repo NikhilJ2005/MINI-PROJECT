@@ -19,7 +19,8 @@ function ResumeUpload({onFileSelect}) {
 
   const handleFile = (file) => {
     if (!file) return;
-    const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+    const dotIdx = file.name.lastIndexOf(".");
+    const ext = dotIdx >= 0 ? file.name.toLowerCase().slice(dotIdx) : "";
 
     if (validTypes.includes(file.type) && validExtensions.includes(ext)) {
       setFileName(file.name);

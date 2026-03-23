@@ -152,14 +152,14 @@ const Results = memo(function Results({ report }) {
                         <h3>Recommendations</h3>
                         {recommendations.map((item, index) => (
                             <div className="recommendation-item" key={index}>
-                                <span className={`badge badge-${item.priority}`}>{item.priority}</span>
+                                <span className={`badge badge-${item.priority || "info"}`}>{item.priority || "Info"}</span>
                                 <div className="recommendation-content">
                                     <div className="recommended-action">{item.action}</div>
                                     <div className="recommendation-meta">
                                         {item.difficulty && <span className="rec-difficulty">{item.difficulty}</span>}
                                         {item.estimated_time && <span className="rec-time">{item.estimated_time}</span>}
                                     </div>
-                                    {item.learn_first && item.learn_first.length > 0 && (
+                                    {Array.isArray(item.learn_first) && item.learn_first.length > 0 && (
                                         <div className="rec-prereqs">Learn first: {item.learn_first.join(", ")}</div>
                                     )}
                                     <div className="recommended-hints">{item.resource_hint}</div>
@@ -174,10 +174,10 @@ const Results = memo(function Results({ report }) {
                         <h3>Skill Learning Path</h3>
                         <div className="learning-path-list">
                             {report.learning_path.map((item, i) => (
-                                <div key={i} className={`learning-path-card lp-${item.priority?.toLowerCase()}`}>
+                                <div key={i} className={`learning-path-card lp-${(item.priority || "info").toLowerCase()}`}>
                                     <div className="lp-header">
                                         <span className="lp-skill">{item.skill}</span>
-                                        <span className={`badge badge-${item.priority}`}>{item.priority}</span>
+                                        <span className={`badge badge-${item.priority || "info"}`}>{item.priority || "Info"}</span>
                                     </div>
                                     <div className="lp-meta">
                                         {item.difficulty && <span className="lp-difficulty">{item.difficulty}</span>}

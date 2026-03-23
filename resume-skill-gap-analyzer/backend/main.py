@@ -716,8 +716,8 @@ async def analyze_batch(
                 "gap_score": result["analysis"]["gap_score"],
                 "confidence": result["analysis"]["confidence"],
                 "composite_score": result["analysis"].get("composite_score", 0),
-                "missing_required": result["analysis"]["missing_required"],
-                "missing_count": len(result["analysis"]["missing_required"]),
+                "missing_required": result["analysis"].get("missing_required", []),
+                "missing_count": len(result["analysis"].get("missing_required", [])),
                 "resume_skills_count": len(claimed_skills),
                 "github_skills_count": len(result["demonstrated_skills"]),
             })

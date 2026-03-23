@@ -28,7 +28,8 @@ function BatchUpload() {
     const valid = [];
     const invalid = [];
     for (const f of fileList) {
-      const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
+      const dotIdx = f.name.lastIndexOf(".");
+      const ext = dotIdx >= 0 ? f.name.toLowerCase().slice(dotIdx) : "";
       if (validExtensions.includes(ext)) {
         valid.push(f);
       } else {

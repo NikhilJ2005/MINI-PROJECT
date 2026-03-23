@@ -344,7 +344,7 @@ class Database:
             job["results"] = []
             for r in results:
                 d = dict(r)
-                d["missing_skills"] = json.loads(d["missing_skills"])
+                d["missing_skills"] = json.loads(d["missing_skills"] or "[]")
                 job["results"].append(d)
             return job
 
