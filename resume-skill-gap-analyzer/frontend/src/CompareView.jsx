@@ -102,14 +102,22 @@ function CompareView() {
             {comparison.candidates.map((c) => (
               <div className="compare-card" key={c.candidate_id}>
                 <h4>{c.name || `Candidate #${c.candidate_id}`}</h4>
-                <div className="compare-score">
-                  <span className={`score-badge ${getScoreClass(c.match_score)}`}>
-                    {Math.round(c.match_score)}%
-                  </span>
-                </div>
-                <div className="compare-meta">
-                  <span>Confidence: {Math.round(c.confidence)}%</span>
-                </div>
+                {c.match_score == null ? (
+                  <div className="compare-meta">
+                    <span className="no-analysis">No analysis for this role</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="compare-score">
+                      <span className={`score-badge ${getScoreClass(c.match_score)}`}>
+                        {Math.round(c.match_score)}%
+                      </span>
+                    </div>
+                    <div className="compare-meta">
+                      <span>Confidence: {Math.round(c.confidence ?? 0)}%</span>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

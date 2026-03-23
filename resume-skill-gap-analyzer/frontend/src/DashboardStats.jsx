@@ -241,11 +241,11 @@ function DashboardStats() {
                   <h3>ML Model Performance</h3>
                   <div className="ml-compact-grid">
                     <div className="ml-compact-card">
-                      <div className="ml-compact-value">{metrics.lr_accuracy}%</div>
+                      <div className="ml-compact-value">{metrics.lr_accuracy != null ? `${metrics.lr_accuracy}%` : "N/A"}</div>
                       <div className="ml-compact-label">Logistic Regression</div>
                     </div>
                     <div className="ml-compact-card">
-                      <div className="ml-compact-value">{metrics.dt_accuracy}%</div>
+                      <div className="ml-compact-value">{metrics.dt_accuracy != null ? `${metrics.dt_accuracy}%` : "N/A"}</div>
                       <div className="ml-compact-label">Decision Tree</div>
                     </div>
                   </div>

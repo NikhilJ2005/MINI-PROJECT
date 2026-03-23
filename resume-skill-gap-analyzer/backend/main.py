@@ -284,8 +284,8 @@ async def _run_single_analysis(
     skill_matrix = state.feature_engineer.create_skill_matrix(
         claimed_skills,
         demonstrated_skills,
-        role_data["required_skills"],
-        role_data.get("nice_to_have", []),
+        role_data.get("required_skills") or [],
+        role_data.get("nice_to_have") or [],
         repos_analyzed=github_result.get("repos_analyzed", 0),
         skills_master=state.skills_master,
     )
@@ -699,6 +699,7 @@ async def analyze_batch(
                 "match_score": result["analysis"]["match_score"],
                 "gap_score": result["analysis"]["gap_score"],
                 "confidence": result["analysis"]["confidence"],
+                "composite_score": result["analysis"].get("composite_score", 0),
                 "report": result["report"],
                 "github_skills": result["demonstrated_skills"],
                 "missing_skills": result["analysis"]["missing_required"],
@@ -714,6 +715,7 @@ async def analyze_batch(
                 "match_score": result["analysis"]["match_score"],
                 "gap_score": result["analysis"]["gap_score"],
                 "confidence": result["analysis"]["confidence"],
+                "composite_score": result["analysis"].get("composite_score", 0),
                 "missing_required": result["analysis"]["missing_required"],
                 "missing_count": len(result["analysis"]["missing_required"]),
                 "resume_skills_count": len(claimed_skills),
@@ -724,8 +726,8 @@ async def analyze_batch(
             logger.error(f"  Batch error for {filename}: {e}")
             errors.append({"file": filename, "error": str(e)})
 
-    # Sort by match_score descending
-    results.sort(key=lambda x: (-x["match_score"], -x["confidence"]))
+    # Sort by composite_score descending (consistent with /rankings endpoint)
+    results.sort(key=lambda x: (-x.get("composite_score", 0), -x["match_score"], -x["confidence"]))
 
     # Assign ranks and save batch results
     for rank, r in enumerate(results, 1):
@@ -830,6 +832,15 @@ async def compare_candidates(request: Request, body: CompareRequest):
         body.candidate_ids, body.target_role
     )
 
+    # Warn about candidates with no analysis for this role
+    missing_analysis = [c for c in comparisons if c.get("match_score") is None]
+    if missing_analysis:
+        names = [c.get("name", f"#{c['candidate_id']}") for c in missing_analysis]
+        logger.warning(f"[Compare] Candidates without analysis for {body.target_role}: {names}")
+
+    # Filter to only candidates with analysis data for the skill matrix
+    analyzed = [c for c in comparisons if c.get("match_score") is not None]
+
     # Build comparison matrix
     role_data = state.job_roles_data[body.target_role]
     all_skills = role_data["required_skills"] + role_data.get("nice_to_have", [])
@@ -837,10 +848,10 @@ async def compare_candidates(request: Request, body: CompareRequest):
     skill_matrix = {}
     for skill in all_skills:
         skill_matrix[skill] = {}
-        for comp in comparisons:
+        for comp in analyzed:
             cid = comp["candidate_id"]
-            resume_skills = comp["extracted_skills"]
-            github_skills = comp["github_skills"]
+            resume_skills = comp.get("extracted_skills") or []
+            github_skills = comp.get("github_skills") or []
             has_resume = skill in resume_skills
             has_github = skill in github_skills
             if has_resume and has_github:
@@ -929,7 +940,7 @@ async def parse_job_description(request: Request, body: JobDescriptionRequest):
         else:
             required_skills.append(skill)
 
-    role_name = body.role_name or "Custom Role"
+    role_name = (body.role_name or "Custom Role").strip()[:100]
 
     if role_name and required_skills:
         state.job_roles_data[role_name] = {
@@ -1251,7 +1262,7 @@ async def export_batch_csv(batch_id: int):
             r.get("resume_skills_count", 0),
             r.get("github_skills_count", 0),
             r.get("missing_count", 0),
-            "; ".join(r.get("missing_required", [])),
+            "; ".join(r.get("missing_required") or []),
             r.get("filename", ""),
         ])
 

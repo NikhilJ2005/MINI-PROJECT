@@ -173,11 +173,11 @@ function CandidatesList() {
                   <div className="analysis-header">
                     <span className="analysis-role">{a.target_role}</span>
                     <span className={`score-badge ${getScoreClass(a.match_score)}`}>
-                      {Math.round(a.match_score)}%
+                      {Math.round(a.match_score ?? 0)}%
                     </span>
                   </div>
                   <div className="analysis-meta">
-                    Confidence: {Math.round(a.confidence)}% | Gap: {Math.round(a.gap_score)}%
+                    Confidence: {Math.round(a.confidence ?? 0)}% | Gap: {Math.round(a.gap_score ?? 0)}%
                   </div>
                 </div>
               ))}

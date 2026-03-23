@@ -260,11 +260,13 @@ class Database:
                     c.email,
                     c.github_username,
                     c.education,
+                    c.extracted_skills,
                     a.id as analysis_id,
                     a.match_score,
                     a.gap_score,
                     a.confidence,
                     a.composite_score,
+                    a.github_skills,
                     a.missing_skills,
                     a.analyzed_at
                 FROM analyses a
@@ -278,7 +280,12 @@ class Database:
             for i, row in enumerate(rows):
                 d = dict(row)
                 d["rank"] = i + 1
-                d["missing_skills"] = json.loads(d["missing_skills"])
+                extracted = json.loads(d.pop("extracted_skills", "[]") or "[]")
+                github_sk = json.loads(d.pop("github_skills", "[]") or "[]")
+                d["missing_skills"] = json.loads(d["missing_skills"] or "[]")
+                d["resume_skills_count"] = len(extracted)
+                d["github_skills_count"] = len(github_sk)
+                d["missing_count"] = len(d["missing_skills"])
                 results.append(d)
             return results
 
@@ -450,12 +457,13 @@ class Database:
                 cursor = conn.execute("""
                     INSERT INTO analyses
                         (candidate_id, target_role, match_score, gap_score,
-                         confidence, report_json, github_skills, missing_skills, analyzed_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         confidence, composite_score, report_json, github_skills, missing_skills, analyzed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     a["candidate_id"], a["target_role"],
                     a.get("match_score", 0), a.get("gap_score", 0),
-                    a.get("confidence", 0), json.dumps(a.get("report", {})),
+                    a.get("confidence", 0), a.get("composite_score", 0),
+                    json.dumps(a.get("report", {})),
                     json.dumps(a.get("github_skills", [])),
                     json.dumps(a.get("missing_skills", [])), time.time(),
                 ))

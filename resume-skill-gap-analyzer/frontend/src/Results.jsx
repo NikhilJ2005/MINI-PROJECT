@@ -206,7 +206,7 @@ const Results = memo(function Results({ report }) {
                                     <div className="metric-label">Decision Tree</div>
                                 </div>
                                 <div className="ml-metric">
-                                    <div className="metric-value">{ml_insights.feature_names?.length || 11}</div>
+                                    <div className="metric-value">{ml_insights.feature_names?.length ?? 11}</div>
                                     <div className="metric-label">Features Used</div>
                                 </div>
                             </div>

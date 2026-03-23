@@ -224,6 +224,7 @@ class SkillGapMLModel:
                 "dt_probabilities": [0.5] * n,
                 "ensemble_predictions": [0] * n,
                 "ensemble_probabilities": [0.5] * n,
+                "warning": "model_not_trained",
             }
 
         # Ensure correct feature order
