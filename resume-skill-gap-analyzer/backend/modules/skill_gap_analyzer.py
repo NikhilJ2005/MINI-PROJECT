@@ -191,8 +191,9 @@ class SkillGapAnalyzer:
         # Confidence score: average ML probability across ALL required skills
         # This gives an unbiased view of how confident the ML model is overall
         all_probs = [
-            probabilities[i]
+            max(0.0, min(float(probabilities[i]), 1.0))
             for i in range(min(len(required_skills), len(probabilities)))
+            if not (isinstance(probabilities[i], float) and (probabilities[i] != probabilities[i]))  # skip NaN
         ]
 
         if all_probs:

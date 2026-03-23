@@ -457,12 +457,13 @@ class Database:
                 cursor = conn.execute("""
                     INSERT INTO analyses
                         (candidate_id, target_role, match_score, gap_score,
-                         confidence, report_json, github_skills, missing_skills, analyzed_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         confidence, composite_score, report_json, github_skills, missing_skills, analyzed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     a["candidate_id"], a["target_role"],
                     a.get("match_score", 0), a.get("gap_score", 0),
-                    a.get("confidence", 0), json.dumps(a.get("report", {})),
+                    a.get("confidence", 0), a.get("composite_score", 0),
+                    json.dumps(a.get("report", {})),
                     json.dumps(a.get("github_skills", [])),
                     json.dumps(a.get("missing_skills", [])), time.time(),
                 ))

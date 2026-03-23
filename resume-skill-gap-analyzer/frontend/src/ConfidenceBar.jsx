@@ -1,6 +1,6 @@
 import "./cssFile/ConfidenceBar.css";
 function ConfidenceBar({ probability }) {
-    const prob = Math.round(probability * 100);
+    const prob = Math.round((probability ?? 0) * 100);
 
     let barColor;
     if (prob >= 70) {

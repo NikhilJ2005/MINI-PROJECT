@@ -284,8 +284,8 @@ async def _run_single_analysis(
     skill_matrix = state.feature_engineer.create_skill_matrix(
         claimed_skills,
         demonstrated_skills,
-        role_data["required_skills"],
-        role_data.get("nice_to_have", []),
+        role_data.get("required_skills") or [],
+        role_data.get("nice_to_have") or [],
         repos_analyzed=github_result.get("repos_analyzed", 0),
         skills_master=state.skills_master,
     )
@@ -940,7 +940,7 @@ async def parse_job_description(request: Request, body: JobDescriptionRequest):
         else:
             required_skills.append(skill)
 
-    role_name = body.role_name or "Custom Role"
+    role_name = (body.role_name or "Custom Role").strip()[:100]
 
     if role_name and required_skills:
         state.job_roles_data[role_name] = {
@@ -1262,7 +1262,7 @@ async def export_batch_csv(batch_id: int):
             r.get("resume_skills_count", 0),
             r.get("github_skills_count", 0),
             r.get("missing_count", 0),
-            "; ".join(r.get("missing_required", [])),
+            "; ".join(r.get("missing_required") or []),
             r.get("filename", ""),
         ])
 

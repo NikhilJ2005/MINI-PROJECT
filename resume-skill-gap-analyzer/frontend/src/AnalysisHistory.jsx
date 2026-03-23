@@ -120,7 +120,7 @@ const AnalysisHistory = memo(function AnalysisHistory({
                         className="history-entry-score"
                         style={{ color: scoreColor(a.match_score) }}
                       >
-                        {Math.round(a.match_score)}%
+                        {Math.round(a.match_score ?? 0)}%
                       </span>
                     </div>
                     <div className="history-entry-time">
