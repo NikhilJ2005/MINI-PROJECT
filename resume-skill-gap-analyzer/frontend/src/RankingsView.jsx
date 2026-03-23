@@ -86,10 +86,11 @@ function RankingsView() {
       {rankings && (
         <RankingTable
           rankings={rankings.map((r, i) => ({
-            rank: i + 1,
+            rank: r.rank || i + 1,
             candidate_id: r.candidate_id,
             name: r.name,
             match_score: r.match_score,
+            composite_score: r.composite_score,
             confidence: r.confidence,
             resume_skills_count: r.resume_skills_count || 0,
             github_skills_count: r.github_skills_count || 0,
