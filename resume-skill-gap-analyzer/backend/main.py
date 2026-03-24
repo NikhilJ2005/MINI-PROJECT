@@ -380,6 +380,7 @@ async def _run_single_analysis(
                     except Exception as e:
                         logger.warning(f"[WebSearch] Failed to enrich learning path: {e}")
                 report["ai_learning_path"] = ai_learning_path
+                report.pop("learning_path", None)  # AI version supersedes static version
 
             # AI Candidate Summary (recruiter-facing)
             candidate_name = (personal_info or {}).get("name", filename or "Candidate")
@@ -1202,7 +1203,7 @@ async def export_pdf_report(analysis_id: int):
             write_text("RECOMMENDATIONS", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
             y += 3
             for rec in recs[:10]:
-                priority_color = (0.8, 0, 0) if rec.get("priority") == "Critical" else (0.6, 0.4, 0)
+                priority_color = (0.8, 0, 0) if rec.get("priority") == "Urgent" else (0.6, 0.4, 0)
                 write_text(f"  [{rec.get('priority', '')}] {rec.get('action', '')}", fontsize=9, color=priority_color)
             y += 5
 
@@ -1220,8 +1221,135 @@ async def export_pdf_report(analysis_id: int):
                 write_text(f"Team Fit: {culture['team_fit_notes']}", fontsize=10)
             y += 5
 
+        # --- Learning Path ---
+        learning_path = report.get("learning_path") or []
+        if learning_path and not report.get("ai_learning_path"):
+            write_separator()
+            write_text("LEARNING PATH", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            for lp in learning_path:
+                priority_color = (0.8, 0, 0) if lp.get("priority") == "Critical" else (0.6, 0.4, 0)
+                meta = f" ({lp.get('difficulty', '')}, {lp.get('estimated_time', '')})" if lp.get("difficulty") else ""
+                write_text(f"  [{lp.get('priority', '')}] {lp.get('skill', '')}{meta}", fontsize=9, color=priority_color)
+                if lp.get("suggested_path"):
+                    write_text(f"    {lp['suggested_path']}", fontsize=8, color=(0.3, 0.3, 0.3))
+            y += 5
+
+        # --- ML Insights ---
+        ml = report.get("ml_insights") or {}
+        if ml.get("lr_accuracy") is not None:
+            write_separator()
+            write_text("ML MODEL INSIGHTS", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            write_text(f"Logistic Regression Accuracy: {ml.get('lr_accuracy', 0)}%", fontsize=10)
+            write_text(f"Decision Tree Accuracy: {ml.get('dt_accuracy', 0)}%", fontsize=10)
+            if ml.get("ensemble_explanation"):
+                write_text(f"Ensemble: {ml['ensemble_explanation']}", fontsize=9)
+            if ml.get("model_explanation"):
+                write_text(f"How it works: {ml['model_explanation']}", fontsize=9)
+            y += 5
+
+        # --- Skill Credibility (if available) ---
+        cred = report.get("ai_skill_credibility")
+        if cred:
+            write_separator()
+            write_text("SKILL CREDIBILITY ASSESSMENT", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            if cred.get("overall_credibility_score") is not None:
+                write_text(f"Credibility Score: {cred['overall_credibility_score']}/10", fontsize=11, bold=True)
+            if cred.get("assessment"):
+                write_text(cred["assessment"], fontsize=9)
+            if cred.get("verified_skills"):
+                write_text(f"Verified: {', '.join(cred['verified_skills'])}", fontsize=9, color=(0, 0.5, 0))
+            if cred.get("questionable_skills"):
+                write_text(f"Needs Verification: {', '.join(cred['questionable_skills'])}", fontsize=9, color=(0.8, 0, 0))
+            y += 5
+
+        # --- Role-Fit Analysis (if available) ---
+        rolefit = report.get("ai_role_fit_narrative")
+        if rolefit:
+            write_separator()
+            write_text("ROLE-FIT ANALYSIS", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            if rolefit.get("fit_score") is not None:
+                write_text(f"Role Fit Score: {rolefit['fit_score']}/10", fontsize=11, bold=True)
+            if rolefit.get("narrative"):
+                write_text(rolefit["narrative"], fontsize=9)
+            if rolefit.get("standout_qualities"):
+                write_text(f"Standout Qualities: {', '.join(rolefit['standout_qualities'])}", fontsize=9, color=(0, 0.5, 0))
+            if rolefit.get("growth_areas"):
+                write_text(f"Growth Areas: {', '.join(rolefit['growth_areas'])}", fontsize=9, color=(0.7, 0.5, 0))
+            if rolefit.get("onboarding_estimate"):
+                write_text(f"Estimated Onboarding: {rolefit['onboarding_estimate']}", fontsize=9)
+            y += 5
+
+        # --- AI Resume Coach (if available) ---
+        feedback = report.get("ai_feedback")
+        if feedback:
+            write_separator()
+            write_text("AI RESUME COACH", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            if feedback.get("overall_advice"):
+                write_text(feedback["overall_advice"], fontsize=9)
+            if feedback.get("resume_tips"):
+                write_text("Improvement Tips:", fontsize=10, bold=True)
+                for tip in feedback["resume_tips"][:5]:
+                    write_text(f"  - {tip}", fontsize=9)
+            if feedback.get("keyword_suggestions"):
+                write_text(f"ATS Keywords to Add: {', '.join(feedback['keyword_suggestions'])}", fontsize=9)
+            y += 5
+
+        # --- AI Interview Prep (if available) ---
+        questions = report.get("ai_interview_questions") or []
+        if questions:
+            write_separator()
+            write_text("AI INTERVIEW PREP", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            for q in questions[:5]:
+                diff_color = (0.8, 0, 0) if q.get("difficulty") == "hard" else (0.6, 0.4, 0) if q.get("difficulty") == "medium" else (0, 0.5, 0)
+                write_text(f"  [{q.get('difficulty', '')}] ({q.get('skill', '')}) {q.get('question', '')}", fontsize=9, color=diff_color)
+                if q.get("prep_hint"):
+                    write_text(f"    Prep: {q['prep_hint']}", fontsize=8, color=(0.3, 0.3, 0.3))
+            y += 5
+
+        # --- AI Learning Path (if available) ---
+        ai_lp = report.get("ai_learning_path") or []
+        if ai_lp:
+            write_separator()
+            write_text("AI LEARNING PATH", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            for item in ai_lp[:8]:
+                week = item.get("week", "")
+                write_text(f"  Week {week}: {item.get('skill', '')}", fontsize=10, bold=True)
+                if item.get("resources"):
+                    for r in item["resources"][:3]:
+                        name_str = r.get("name", r) if isinstance(r, dict) else str(r)
+                        write_text(f"    - {name_str}", fontsize=8, color=(0.3, 0.3, 0.3))
+                if item.get("project_idea"):
+                    write_text(f"    Project: {item['project_idea']}", fontsize=8, color=(0.3, 0.3, 0.3))
+            y += 5
+
+        # --- GitHub Insights ---
+        gi = report.get("github_insights") or {}
+        if gi.get("repos_analyzed"):
+            write_separator()
+            write_text("GITHUB INSIGHTS", fontsize=13, bold=True, color=(0.1, 0.2, 0.5))
+            y += 3
+            write_text(f"Repositories Analyzed: {gi['repos_analyzed']}", fontsize=10)
+            if gi.get("total_topics"):
+                write_text(f"Topics Found: {gi['total_topics']}", fontsize=10)
+            if gi.get("hidden_strengths"):
+                write_text(f"Hidden Strengths: {', '.join(gi['hidden_strengths'])}", fontsize=9, color=(0, 0.4, 0.7))
+            for lang in (gi.get("top_languages") or [])[:5]:
+                kb = lang.get("bytes", 0) / 1000
+                write_text(f"  {lang.get('language', '?')}: {kb:.1f} KB", fontsize=9)
+            y += 5
+
         # --- Footer ---
         write_separator()
+        generated_at = report.get("generated_at", "")
+        if generated_at:
+            write_text(f"Generated: {generated_at}", fontsize=8, color=(0.5, 0.5, 0.5))
         write_text("Generated by Automated Recruiting Platform", fontsize=8, color=(0.5, 0.5, 0.5))
 
         # Save to buffer
@@ -1272,9 +1400,9 @@ async def export_batch_csv(batch_id: int):
     # Header
     writer.writerow([
         "Rank", "Name", "Email", "GitHub", "Match Score (%)",
-        "Gap Score (%)", "Confidence (%)", "Resume Skills Count",
-        "GitHub Skills Count", "Missing Skills Count", "Missing Skills",
-        "Filename",
+        "Composite Score", "Gap Score (%)", "Confidence (%)",
+        "Resume Skills Count", "GitHub Skills Count",
+        "Missing Skills Count", "Missing Skills", "Filename",
     ])
 
     rankings = job.get("results", [])
@@ -1285,6 +1413,7 @@ async def export_batch_csv(batch_id: int):
             _csv_safe(r.get("email", "")),
             _csv_safe(r.get("github_username", "")),
             f"{r.get('match_score', 0):.1f}",
+            f"{r.get('composite_score', 0):.1f}",
             f"{r.get('gap_score', 0):.1f}",
             f"{r.get('confidence', 0):.1f}",
             r.get("resume_skills_count", 0),

@@ -97,7 +97,7 @@ const Results = memo(function Results({ report }) {
             ...(report.skill_breakdown?.required_analysis || []),
             ...(report.skill_breakdown?.nice_to_have_analysis || []),
         ];
-        const csvData = allSkills.map((s) => ({
+        const skillRows = allSkills.map((s) => ({
             Skill: s.skill,
             Status: s.status,
             "In Resume": s.in_resume ? "Yes" : "No",
@@ -105,7 +105,59 @@ const Results = memo(function Results({ report }) {
             "ML Confidence": s.probability != null ? `${Math.round(s.probability * 100)}%` : "N/A",
             Category: s.category || "required",
         }));
-        const csv = Papa.unparse(csvData);
+
+        let csv = Papa.unparse(skillRows);
+
+        // Executive Summary section
+        const es = report.executive_summary;
+        if (es) {
+            csv += "\n\n--- Executive Summary ---\n";
+            csv += Papa.unparse([{
+                "Match Score": `${es.match_score?.toFixed(1)}%`,
+                "Match Label": es.match_label || "",
+                "Confidence": `${es.confidence_score?.toFixed(1)}%`,
+                "Resume Skills": es.total_resume_skills,
+                "GitHub Skills": es.total_github_skills,
+                "Missing Critical": es.missing_critical_skills,
+            }]);
+        }
+
+        // Recommendations section
+        const recs = report.recommendations || [];
+        if (recs.length > 0) {
+            csv += "\n\n--- Recommendations ---\n";
+            csv += Papa.unparse(recs.map((r) => ({
+                Skill: r.skill,
+                Priority: r.priority,
+                Action: r.action,
+                Difficulty: r.difficulty || "",
+                "Estimated Time": r.estimated_time || "",
+                "Resource Hint": r.resource_hint || "",
+            })));
+        }
+
+        // AI Credibility section
+        const cred = report.ai_skill_credibility;
+        if (cred) {
+            csv += "\n\n--- Skill Credibility ---\n";
+            csv += Papa.unparse([{
+                "Credibility Score": cred.overall_credibility_score != null ? `${cred.overall_credibility_score}/10` : "N/A",
+                "Verified Skills": (cred.verified_skills || []).join("; "),
+                "Questionable Skills": (cred.questionable_skills || []).join("; "),
+            }]);
+        }
+
+        // Culture Fit section
+        const culture = report.ai_culture_fit;
+        if (culture) {
+            csv += "\n\n--- Culture & Soft Skills ---\n";
+            csv += Papa.unparse([{
+                "Soft Skills": (culture.soft_skills || []).join("; "),
+                "Communication Score": culture.communication_score != null ? `${culture.communication_score}/10` : "N/A",
+                "Team Fit": culture.team_fit_notes || "",
+            }]);
+        }
+
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -133,6 +185,11 @@ const Results = memo(function Results({ report }) {
             </div>
 
             <section className="results-section" ref={resultsRef}>
+                {report.generated_at && (
+                    <div className="report-timestamp">
+                        Report generated: {new Date(report.generated_at).toLocaleString()}
+                    </div>
+                )}
                 <ScoreCard report={report} />
                 {report.executive_summary && <Summary summary={report.executive_summary} />}
 
@@ -169,7 +226,7 @@ const Results = memo(function Results({ report }) {
                     </div>
                 )}
 
-                {report.learning_path?.length > 0 && (
+                {report.learning_path?.length > 0 && !report.ai_learning_path?.length && (
                     <div className="learning-path-section">
                         <h3>Skill Learning Path</h3>
                         <div className="learning-path-list">
