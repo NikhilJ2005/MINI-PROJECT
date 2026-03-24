@@ -30,8 +30,8 @@ function RankingTable({ rankings }) {
                   {Math.round(r.composite_score ?? r.match_score)}%
                 </span>
               </td>
-              <td>{Math.round(r.match_score)}%</td>
-              <td>{Math.round(r.confidence)}%</td>
+              <td>{Math.round(r.match_score ?? 0)}%</td>
+              <td>{Math.round(r.confidence ?? 0)}%</td>
               <td>{r.resume_skills_count}</td>
               <td>{r.github_skills_count}</td>
               <td>{r.missing_count}</td>

@@ -39,8 +39,8 @@ function RankingsView() {
     const csvData = rankings.map((r, i) => ({
       Rank: i + 1,
       Name: r.name || "Unknown",
-      "Match Score": `${Math.round(r.match_score)}%`,
-      Confidence: `${Math.round(r.confidence)}%`,
+      "Match Score": `${Math.round(r.match_score ?? 0)}%`,
+      Confidence: `${Math.round(r.confidence ?? 0)}%`,
       "Resume Skills": r.resume_skills_count || 0,
       "GitHub Skills": r.github_skills_count || 0,
       Missing: r.missing_count || 0,

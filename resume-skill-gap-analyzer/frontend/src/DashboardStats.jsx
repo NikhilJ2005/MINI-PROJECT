@@ -196,7 +196,7 @@ function DashboardStats() {
                 <div className="dashboard-section">
                   <h3>Recent Activity</h3>
                   <div className="activity-feed">
-                    {stats.recent_activity.map((a, i) => (
+                    {(stats.recent_activity || []).map((a, i) => (
                       <div key={i} className="activity-item">
                         <div className="activity-dot" />
                         <div className="activity-content">
@@ -205,7 +205,7 @@ function DashboardStats() {
                         </div>
                         <div className="activity-right">
                           <span className={`activity-score ${scoreClass(a.match_score)}`}>
-                            {Math.round(a.match_score)}%
+                            {Math.round(a.match_score ?? 0)}%
                           </span>
                           <span className="activity-time">{timeAgo(a.analyzed_at)}</span>
                         </div>
@@ -219,7 +219,7 @@ function DashboardStats() {
                 <div className="dashboard-section">
                   <h3>Top Candidates</h3>
                   <div className="top-candidates-list">
-                    {stats.top_candidates.map((c, i) => (
+                    {(stats.top_candidates || []).map((c, i) => (
                       <div key={i} className="top-candidate-item">
                         <div className="top-candidate-rank">#{i + 1}</div>
                         <div className="top-candidate-info">
@@ -227,7 +227,7 @@ function DashboardStats() {
                           <div className="top-candidate-role">{c.role}</div>
                         </div>
                         <div className={`top-candidate-score ${scoreClass(c.match_score)}`}>
-                          {Math.round(c.match_score)}%
+                          {Math.round(c.match_score ?? 0)}%
                         </div>
                       </div>
                     ))}
