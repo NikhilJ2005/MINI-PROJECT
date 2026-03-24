@@ -190,7 +190,8 @@ _default_origins = [
 ]
 _env_origins = os.getenv("CORS_ORIGINS", "")
 if _env_origins == "*":
-    cors_origins = ["*"]
+    logger.warning("[Security] CORS_ORIGINS='*' is unsafe with credentials; using defaults")
+    cors_origins = _default_origins
 elif _env_origins:
     cors_origins = list(set(_default_origins + _env_origins.split(",")))
 else:
@@ -200,8 +201,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
     expose_headers=["Content-Disposition"],
 )
 
@@ -211,8 +212,18 @@ app.add_middleware(
 async def add_security_headers(request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = "upgrade-insecure-requests"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://api.github.com https://google.serper.dev; "
+        "frame-ancestors 'none'; "
+        "upgrade-insecure-requests"
+    )
     return response
 
 
@@ -256,6 +267,12 @@ async def _run_single_analysis(
                      "raw_languages": {}, "raw_topics": [],
                      "commit_activity": {}, "error": "No GitHub username provided"}
     demonstrated_skills = []
+
+    # Validate GitHub username format (1-39 chars, alphanumeric + hyphens)
+    _gh_user_re = re.compile(r'^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$')
+    if github_username and not _gh_user_re.match(github_username):
+        logger.warning(f"[Security] Invalid GitHub username format, skipping: {github_username!r}")
+        github_username = ""
 
     if github_username:
         try:
@@ -777,6 +794,8 @@ async def get_batch(batch_id: int):
 # ---------------------------------------------------------------------------
 @app.get("/candidates")
 async def get_candidates(limit: int = 100, offset: int = 0):
+    limit = min(max(1, limit), 500)
+    offset = max(0, offset)
     candidates = state.db.get_all_candidates(limit, offset)
     total = state.db.get_candidate_count()
     return {"candidates": candidates, "total": total}
@@ -809,6 +828,7 @@ async def delete_candidate(candidate_id: int):
 # ---------------------------------------------------------------------------
 @app.get("/rankings/{target_role}")
 async def get_rankings(target_role: str, limit: int = 50):
+    limit = min(max(1, limit), 500)
     if target_role not in state.job_roles_data:
         raise HTTPException(400, f"Unknown role: '{target_role}'.")
     rankings = state.db.get_ranked_candidates(target_role, limit)
@@ -995,6 +1015,7 @@ async def parse_job_description(request: Request, body: JobDescriptionRequest):
 @app.get("/analysis-history")
 async def get_analysis_history(limit: int = 50):
     """Get recent analyses for the history sidebar."""
+    limit = min(max(1, limit), 200)
     analyses = state.db.get_recent_analyses(limit)
     return {"analyses": analyses}
 
@@ -1227,6 +1248,13 @@ async def export_pdf_report(analysis_id: int):
 # ---------------------------------------------------------------------------
 #  ENDPOINT: Export Batch Results as CSV (server-side, handles big data)
 # ---------------------------------------------------------------------------
+def _csv_safe(val):
+    """Prefix strings that start with formula-triggering chars to prevent CSV injection."""
+    if isinstance(val, str) and val and val[0] in "=+@-":
+        return "'" + val
+    return val
+
+
 @app.get("/export/batch-csv/{batch_id}")
 async def export_batch_csv(batch_id: int):
     """
@@ -1253,17 +1281,17 @@ async def export_batch_csv(batch_id: int):
     for r in rankings:
         writer.writerow([
             r.get("rank", ""),
-            r.get("name", ""),
-            r.get("email", ""),
-            r.get("github_username", ""),
+            _csv_safe(r.get("name", "")),
+            _csv_safe(r.get("email", "")),
+            _csv_safe(r.get("github_username", "")),
             f"{r.get('match_score', 0):.1f}",
             f"{r.get('gap_score', 0):.1f}",
             f"{r.get('confidence', 0):.1f}",
             r.get("resume_skills_count", 0),
             r.get("github_skills_count", 0),
             r.get("missing_count", 0),
-            "; ".join(r.get("missing_required") or []),
-            r.get("filename", ""),
+            _csv_safe("; ".join(r.get("missing_required") or [])),
+            _csv_safe(r.get("filename", "")),
         ])
 
     buf.seek(0)
@@ -1301,12 +1329,12 @@ async def export_candidates_csv(target_role: str = ""):
     for c in rankings:
         writer.writerow([
             c.get("id", c.get("candidate_id", "")),
-            c.get("name", ""),
-            c.get("email", ""),
-            c.get("phone", ""),
-            c.get("github_username", ""),
-            c.get("linkedin_url", ""),
-            c.get("education", ""),
+            _csv_safe(c.get("name", "")),
+            _csv_safe(c.get("email", "")),
+            _csv_safe(c.get("phone", "")),
+            _csv_safe(c.get("github_username", "")),
+            _csv_safe(c.get("linkedin_url", "")),
+            _csv_safe(c.get("education", "")),
             c.get("resume_skills_count", len(c.get("extracted_skills", []))),
         ])
 
@@ -1332,13 +1360,16 @@ if os.path.isdir(static_dir):
     if os.path.isdir(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="static-assets")
 
+    from pathlib import Path as _Path
+    _static_root = _Path(static_dir).resolve()
+
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
         """Catch-all: serve index.html for React SPA routing."""
-        file_path = os.path.realpath(os.path.join(static_dir, full_path))
-        if file_path.startswith(os.path.realpath(static_dir)) and os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(static_dir, "index.html"))
+        requested = (_static_root / full_path).resolve()
+        if requested.is_relative_to(_static_root) and requested.is_file():
+            return FileResponse(requested)
+        return FileResponse(_static_root / "index.html")
 
 
 # ---------------------------------------------------------------------------
