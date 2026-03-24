@@ -17,6 +17,7 @@
 =============================================================================
 """
 
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from loguru import logger
@@ -329,6 +330,7 @@ class ReportGenerator:
         # --- Compile the Full Report ---
         report = {
             "title": "Skill Gap Analysis Report",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "target_role": target_role,
             "github_username": github_username,
             "executive_summary": executive_summary,
