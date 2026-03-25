@@ -1,4 +1,5 @@
 import { memo, useRef, useCallback } from "react";
+import { useUserRole } from "./UserRoleContext";
 import ScoreCard from "./ScoreCard";
 import Summary from "./Summary";
 import SkillTable from "./SkillTable";
@@ -11,6 +12,9 @@ import "./cssFile/Results.css";
 
 const Results = memo(function Results({ report }) {
     if (!report) return null;
+    const { userRole } = useUserRole();
+    const isCandidate = userRole === "candidate";
+    const isRecruiter = userRole === "recruiter";
     const ml_insights = report.ml_insights || {};
     const git_insights = report.github_insights || {};
     const maxLang = git_insights?.top_languages?.[0]?.bytes || 1;
@@ -304,7 +308,7 @@ const Results = memo(function Results({ report }) {
                 )}
 
                 {/* AI Candidate Summary (recruiter-facing) */}
-                {report.ai_candidate_summary && (
+                {isRecruiter && report.ai_candidate_summary && (
                     <div className="ai-candidate-summary-section">
                         <h3>AI Candidate Assessment</h3>
                         <div className="ai-summary-container">
@@ -338,8 +342,8 @@ const Results = memo(function Results({ report }) {
                     </div>
                 )}
 
-                {/* AI Skill Credibility Assessment */}
-                {report.ai_skill_credibility && (
+                {/* AI Skill Credibility Assessment (recruiter-facing) */}
+                {isRecruiter && report.ai_skill_credibility && (
                     <div className="ai-credibility-section">
                         <h3>Skill Credibility Assessment</h3>
                         <div className="credibility-container">
@@ -385,8 +389,8 @@ const Results = memo(function Results({ report }) {
                     </div>
                 )}
 
-                {/* AI Role-Fit Narrative */}
-                {report.ai_role_fit_narrative && (
+                {/* AI Role-Fit Narrative (recruiter-facing) */}
+                {isRecruiter && report.ai_role_fit_narrative && (
                     <div className="ai-rolefit-section">
                         <h3>Role-Fit Analysis</h3>
                         <div className="rolefit-container">
@@ -427,8 +431,8 @@ const Results = memo(function Results({ report }) {
                     </div>
                 )}
 
-                {/* AI Culture Fit & Soft Skills */}
-                {report.ai_culture_fit && (
+                {/* AI Culture Fit & Soft Skills (recruiter-facing) */}
+                {isRecruiter && report.ai_culture_fit && (
                     <div className="ai-culture-section">
                         <h3>Culture & Soft Skills</h3>
                         <div className="culture-container">
@@ -457,7 +461,8 @@ const Results = memo(function Results({ report }) {
                     </div>
                 )}
 
-                {report.ai_feedback && (
+                {/* AI Resume Coach (candidate-facing) */}
+                {isCandidate && report.ai_feedback && (
                     <div className="ai-feedback-section">
                         <h3>AI Resume Coach</h3>
                         <div className="ai-feedback-container">
@@ -498,7 +503,8 @@ const Results = memo(function Results({ report }) {
                     </div>
                 )}
 
-                {report.ai_interview_questions?.length > 0 && (
+                {/* AI Interview Prep (candidate-facing only) */}
+                {isCandidate && report.ai_interview_questions?.length > 0 && (
                     <div className="ai-interview-section">
                         <h3>AI Interview Prep</h3>
                         <div className="interview-questions">
@@ -518,7 +524,8 @@ const Results = memo(function Results({ report }) {
                     </div>
                 )}
 
-                {report.ai_learning_path?.length > 0 && (
+                {/* AI Learning Path (candidate-facing) */}
+                {isCandidate && report.ai_learning_path?.length > 0 && (
                     <div className="ai-learning-section">
                         <h3>AI Learning Path</h3>
                         <div className="learning-path-timeline">

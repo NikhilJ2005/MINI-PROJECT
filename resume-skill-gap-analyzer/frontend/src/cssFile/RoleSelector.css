@@ -1,0 +1,193 @@
+.role-selector-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #2563eb 100%);
+  position: relative;
+  padding: 40px 20px;
+}
+
+.role-selector-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 70% 20%, rgba(255,255,255,0.04) 0%, transparent 60%),
+              radial-gradient(circle at 20% 80%, rgba(6,182,212,0.08) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.role-selector-content {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 860px;
+  width: 100%;
+}
+
+.role-selector-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.role-brand-icon {
+  width: 44px;
+  height: 44px;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.role-brand-name {
+  font-family: var(--font-heading, 'Inter', sans-serif);
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+
+.role-selector-title {
+  font-family: var(--font-heading, 'Inter', sans-serif);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 8px;
+}
+
+.role-selector-subtitle {
+  color: rgba(255,255,255,0.75);
+  font-size: 1rem;
+  margin: 0 0 40px;
+}
+
+.role-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.role-card {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 16px;
+  padding: 36px 28px 28px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+  color: #fff;
+}
+
+.role-card:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.3);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+}
+
+.role-card-candidate:hover {
+  border-color: #38bdf8;
+  box-shadow: 0 20px 40px rgba(56,189,248,0.15);
+}
+
+.role-card-recruiter:hover {
+  border-color: #a78bfa;
+  box-shadow: 0 20px 40px rgba(167,139,250,0.15);
+}
+
+.role-card-icon {
+  margin-bottom: 16px;
+  color: rgba(255,255,255,0.8);
+}
+
+.role-card-candidate .role-card-icon { color: #38bdf8; }
+.role-card-recruiter .role-card-icon { color: #a78bfa; }
+
+.role-card-title {
+  font-family: var(--font-heading, 'Inter', sans-serif);
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.role-card-desc {
+  color: rgba(255,255,255,0.65);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+
+.role-card-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  flex: 1;
+}
+
+.role-card-features li {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.7);
+  padding: 5px 0;
+  padding-left: 20px;
+  position: relative;
+}
+
+.role-card-features li::before {
+  content: '\2713';
+  position: absolute;
+  left: 0;
+  font-weight: 700;
+}
+
+.role-card-candidate .role-card-features li::before { color: #38bdf8; }
+.role-card-recruiter .role-card-features li::before { color: #a78bfa; }
+
+.role-card-cta {
+  display: block;
+  text-align: center;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.role-card-candidate .role-card-cta {
+  background: rgba(56,189,248,0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.3);
+}
+
+.role-card-candidate:hover .role-card-cta {
+  background: #38bdf8;
+  color: #0f172a;
+}
+
+.role-card-recruiter .role-card-cta {
+  background: rgba(167,139,250,0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(167,139,250,0.3);
+}
+
+.role-card-recruiter:hover .role-card-cta {
+  background: #a78bfa;
+  color: #0f172a;
+}
+
+@media (max-width: 640px) {
+  .role-cards {
+    grid-template-columns: 1fr;
+  }
+  .role-selector-title { font-size: 1.3rem; }
+  .role-brand-name { font-size: 1.6rem; }
+}
