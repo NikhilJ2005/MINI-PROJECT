@@ -1,50 +1,129 @@
-.tab-nav {
-  background: var(--card-bg, #fff);
-  border-bottom: 1px solid var(--border-light);
+.navbar {
+  background: linear-gradient(135deg, #0a1628 0%, #162844 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
   position: sticky;
   top: 0;
   z-index: 50;
 }
 
-.tab-nav-inner {
+.navbar-inner {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  justify-content: space-between;
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 10px 24px;
+  padding: 0 24px;
+}
+
+.navbar-links {
+  display: flex;
+  gap: 2px;
   overflow-x: auto;
 }
 
-.tab-btn {
+.navbar-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 18px;
-  border: none;
-  background: none;
+  padding: 14px 16px;
   font-family: var(--font-body);
   font-size: 0.85rem;
   font-weight: 500;
-  color: var(--text-gray);
+  color: rgba(255,255,255,0.55);
   cursor: pointer;
-  border-radius: var(--radius-md);
+  border-bottom: 2px solid transparent;
   transition: all 0.2s ease;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.navbar-link:hover {
+  color: rgba(255,255,255,0.9);
+  border-bottom-color: rgba(255,255,255,0.3);
+}
+
+.navbar-link.active {
+  color: #fff;
+  border-bottom-color: #38bdf8;
+  font-weight: 600;
+}
+
+.navbar-link-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+/* Right section: role badge + switch */
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.role-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.role-badge-candidate {
+  background: rgba(56,189,248,0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.3);
+}
+
+.role-badge-recruiter {
+  background: rgba(167,139,250,0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(167,139,250,0.3);
+}
+
+.switch-role-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
   white-space: nowrap;
 }
 
-.tab-btn:hover {
-  color: var(--primary);
-  background: var(--primary-50, rgba(37, 99, 235, 0.06));
-}
-
-.tab-btn.active {
+.switch-role-btn:hover {
   color: #fff;
-  background: var(--primary);
-  font-weight: 600;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.2);
 }
 
-.tab-icon {
-  font-size: 0.9rem;
-  line-height: 1;
+@media (max-width: 768px) {
+  .navbar-inner {
+    flex-wrap: wrap;
+    padding: 0 12px;
+  }
+  .navbar-links {
+    order: 2;
+    width: 100%;
+    padding-bottom: 4px;
+  }
+  .navbar-right {
+    order: 1;
+    width: 100%;
+    justify-content: flex-end;
+    padding: 8px 0 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .navbar-link {
+    padding: 10px 12px;
+    font-size: 0.8rem;
+  }
 }
