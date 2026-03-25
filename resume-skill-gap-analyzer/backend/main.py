@@ -460,6 +460,62 @@ async def health_check():
 
 
 # ---------------------------------------------------------------------------
+#  ENDPOINT: App Info (public, AI/crawler-friendly)
+# ---------------------------------------------------------------------------
+@app.get("/api/info")
+async def app_info():
+    """
+    Public endpoint that returns structured metadata about this application.
+    Designed for AI tools, web crawlers, and external service discovery.
+    No authentication required.
+    """
+    return {
+        "app": "Automated Recruiting Platform",
+        "description": "Resume analysis and skill gap detection using ML and LLM",
+        "status": "online",
+        "version": "2.0.0",
+        "features": [
+            "Resume parsing (PDF and plain text)",
+            "Skill gap analysis against target job roles",
+            "Job matching with ML-based scoring",
+            "GitHub profile analysis for demonstrated skills",
+            "Batch multi-resume upload with candidate ranking",
+            "LLM-powered AI feedback and interview questions",
+            "AI-generated learning paths for skill improvement",
+            "Candidate database with SQLite persistence",
+            "Side-by-side candidate comparison",
+            "Job description parsing for custom roles",
+            "Dashboard analytics and reporting",
+        ],
+        "endpoints": [
+            {"path": "/api/info",        "method": "GET",  "description": "App metadata (this endpoint)"},
+            {"path": "/health",          "method": "GET",  "description": "Health check with system stats"},
+            {"path": "/api/health",      "method": "GET",  "description": "Health check (API-prefixed alias)"},
+            {"path": "/dashboard",       "method": "GET",  "description": "Dashboard analytics"},
+            {"path": "/job-roles",       "method": "GET",  "description": "List available job roles"},
+            {"path": "/skills-master",   "method": "GET",  "description": "Full skills taxonomy"},
+            {"path": "/analyze",         "method": "POST", "description": "Analyze a single resume (file upload)"},
+            {"path": "/analyze-text",    "method": "POST", "description": "Analyze a single resume (raw text)"},
+            {"path": "/analyze-batch",   "method": "POST", "description": "Batch analyze multiple resumes"},
+            {"path": "/analyze-github",  "method": "POST", "description": "Analyze a GitHub profile only"},
+            {"path": "/parse-jd",        "method": "POST", "description": "Extract skills from a job description"},
+            {"path": "/candidates",      "method": "GET",  "description": "List all stored candidates"},
+            {"path": "/compare",         "method": "POST", "description": "Side-by-side candidate comparison"},
+            {"path": "/rankings",        "method": "GET",  "description": "Ranked candidate leaderboard"},
+            {"path": "/docs",            "method": "GET",  "description": "Interactive API documentation (Swagger UI)"},
+            {"path": "/redoc",           "method": "GET",  "description": "API documentation (ReDoc)"},
+        ],
+        "tech_stack": {
+            "backend": "FastAPI (Python 3.11)",
+            "frontend": "React + Vite",
+            "ml": "scikit-learn (Logistic Regression, Decision Tree)",
+            "llm": "Groq API",
+            "database": "SQLite",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 #  ENDPOINT: Dashboard Stats
 # ---------------------------------------------------------------------------
 @app.get("/dashboard")
