@@ -9,13 +9,14 @@ const ALL_TABS = [
   { id: "compare", label: "Compare", icon: "\u2696\uFE0F", roles: ["recruiter"] },
   { id: "jd-parser", label: "JD Parser", icon: "\uD83D\uDCCB", roles: ["candidate", "recruiter"] },
   { id: "dashboard", label: "Dashboard", icon: "\uD83D\uDCCA", roles: ["candidate", "recruiter"] },
+  { id: "history", label: "History", icon: "\uD83D\uDD52", roles: ["candidate", "recruiter"] },
 ];
 
 export function getVisibleTabs(role) {
   return ALL_TABS.filter((tab) => tab.roles.includes(role));
 }
 
-function TabNav({ activeTab, onTabChange, darkMode, toggleDarkMode, onHistoryToggle, historyOpen }) {
+function TabNav({ activeTab, onTabChange, darkMode, toggleDarkMode }) {
   const { userRole, logout } = useUserRole();
   const visibleTabs = getVisibleTabs(userRole);
 
@@ -70,18 +71,6 @@ function TabNav({ activeTab, onTabChange, darkMode, toggleDarkMode, onHistoryTog
               </a>
             ))}
           </div>
-
-          <button
-            className={`history-toggle-btn ${historyOpen ? "active" : ""}`}
-            onClick={onHistoryToggle}
-            title="Toggle History"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            History
-          </button>
         </div>
       </nav>
     </header>

@@ -34,7 +34,6 @@ function App() {
   const [report, setReport] = useState(null);
   const [currentAnalysisId, setCurrentAnalysisId] = useState(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Dark mode state
   const [darkMode, setDarkMode] = useState(
@@ -96,17 +95,9 @@ function App() {
         toggleDarkMode();
         return;
       }
-      // Alt+H: toggle history
-      if (e.altKey && (e.key === "h" || e.key === "H")) {
-        e.preventDefault();
-        setHistoryOpen((o) => !o);
-        return;
-      }
-      // Escape: close history or clear report
+      // Escape: clear report
       if (e.key === "Escape") {
-        if (historyOpen) {
-          setHistoryOpen(false);
-        } else if (report) {
+        if (report) {
           setReport(null);
           setCurrentAnalysisId(null);
         }
@@ -116,7 +107,7 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [userRole, report, historyOpen, toggleDarkMode]);
+  }, [userRole, report, toggleDarkMode]);
 
   // Called after a new analysis completes
   const handleReportReceived = useCallback((newReport) => {
@@ -135,18 +126,6 @@ function App() {
     setError("");
   }, []);
 
-  // Called when user clicks "New Analysis"
-  const handleNewAnalysis = useCallback(() => {
-    setReport(null);
-    setCurrentAnalysisId(null);
-    setError("");
-    setActiveTab("analyze");
-  }, []);
-
-  const toggleHistory = useCallback(() => {
-    setHistoryOpen((o) => !o);
-  }, []);
-
   // Show role selector if no role chosen
   if (!userRole) {
     return <RoleSelector />;
@@ -159,21 +138,7 @@ function App() {
         onTabChange={setActiveTab}
         darkMode={darkMode}
         toggleDarkMode={toggleDarkMode}
-        onHistoryToggle={toggleHistory}
-        historyOpen={historyOpen}
       />
-
-      {/* History dropdown panel */}
-      <ErrorBoundary>
-        <AnalysisHistory
-          refreshKey={historyRefreshKey}
-          activeAnalysisId={currentAnalysisId}
-          onSelect={handleHistorySelect}
-          onNewAnalysis={handleNewAnalysis}
-          isOpen={historyOpen}
-          onToggle={toggleHistory}
-        />
-      </ErrorBoundary>
 
       <main className="container main-content">
         {activeTab === "analyze" && (
@@ -224,13 +189,29 @@ function App() {
             {activeTab === "dashboard" && <DashboardStats />}
           </Suspense>
         </ErrorBoundary>
+
+        {activeTab === "history" && (
+          <ErrorBoundary>
+            <AnalysisHistory
+              refreshKey={historyRefreshKey}
+              activeAnalysisId={currentAnalysisId}
+              onSelect={handleHistorySelect}
+              onNewAnalysis={() => {
+                setReport(null);
+                setCurrentAnalysisId(null);
+                setError("");
+                setActiveTab("analyze");
+              }}
+            />
+          </ErrorBoundary>
+        )}
       </main>
 
       <footer className="app-footer">
         <div className="container">
           <p>Automated Recruiting Platform &mdash; Powered by FastAPI, Scikit-learn &amp; spaCy</p>
           <p className="shortcuts-hint">
-            Shortcuts: Alt+1-{getVisibleTabs(userRole).length} tabs | Alt+N new | Alt+H history | Alt+D dark mode | Esc clear
+            Shortcuts: Alt+1-{getVisibleTabs(userRole).length} tabs | Alt+N new | Alt+D dark mode | Esc clear
           </p>
         </div>
       </footer>

@@ -127,7 +127,6 @@
 .header-nav-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   max-width: var(--max-width);
   margin: 0 auto;
   padding: 0 24px;
@@ -171,37 +170,6 @@
   line-height: 1;
 }
 
-/* --- History Toggle Button --- */
-.history-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  font-family: var(--font-body);
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: rgba(255,255,255,0.5);
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.history-toggle-btn:hover {
-  color: #fff;
-  background: rgba(255,255,255,0.12);
-  border-color: rgba(255,255,255,0.2);
-}
-
-.history-toggle-btn.active {
-  color: #38bdf8;
-  background: rgba(56,189,248,0.1);
-  border-color: rgba(56,189,248,0.3);
-}
-
 /* --- Responsive --- */
 @media (max-width: 768px) {
   .header-brand-inner {
@@ -221,8 +189,5 @@
   .navbar-link {
     padding: 10px 10px;
     font-size: 0.78rem;
-  }
-  .history-toggle-btn {
-    margin: 6px 0;
   }
 }
