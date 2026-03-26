@@ -106,7 +106,7 @@ const Results = memo(function Results({ report }) {
             Status: s.status,
             "In Resume": s.in_resume ? "Yes" : "No",
             "On GitHub": s.in_github ? "Yes" : "No",
-            "ML Confidence": s.probability != null ? `${Math.round(s.probability * 100)}%` : "N/A",
+            "Evidence Strength": s.evidence_strength != null ? `${Math.round(s.evidence_strength)}%` : s.probability != null ? `${Math.round(s.probability * 100)}%` : "N/A",
             Category: s.category || "required",
         }));
 

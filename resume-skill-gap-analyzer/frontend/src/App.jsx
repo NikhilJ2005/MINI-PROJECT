@@ -33,7 +33,7 @@ function App() {
   const [report, setReport] = useState(null);
   const [currentAnalysisId, setCurrentAnalysisId] = useState(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Dark mode state
   const [darkMode, setDarkMode] = useState(
@@ -95,9 +95,17 @@ function App() {
         toggleDarkMode();
         return;
       }
-      // Escape: clear report
+      // Alt+H: toggle history
+      if (e.altKey && (e.key === "h" || e.key === "H")) {
+        e.preventDefault();
+        setHistoryOpen((o) => !o);
+        return;
+      }
+      // Escape: close history or clear report
       if (e.key === "Escape") {
-        if (report) {
+        if (historyOpen) {
+          setHistoryOpen(false);
+        } else if (report) {
           setReport(null);
           setCurrentAnalysisId(null);
         }
@@ -107,7 +115,7 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [userRole, report, toggleDarkMode]);
+  }, [userRole, report, historyOpen, toggleDarkMode]);
 
   // Called after a new analysis completes
   const handleReportReceived = useCallback((newReport) => {
@@ -115,7 +123,6 @@ function App() {
     if (newReport?.analysis_id) {
       setCurrentAnalysisId(newReport.analysis_id);
     }
-    // Trigger history sidebar refresh
     setHistoryRefreshKey((k) => k + 1);
   }, []);
 
@@ -135,6 +142,10 @@ function App() {
     setActiveTab("analyze");
   }, []);
 
+  const toggleHistory = useCallback(() => {
+    setHistoryOpen((o) => !o);
+  }, []);
+
   // Show role selector if no role chosen
   if (!userRole) {
     return <RoleSelector />;
@@ -142,89 +153,74 @@ function App() {
 
   return (
     <>
-      <header className="app-header">
-        <div className="container header-row">
-          <div>
-            <div className="brand-mark">
-              <span className="brand-icon">{"\u25C6"}</span>
-              <span className="brand-name">SkillSync</span>
-            </div>
-            <p className="app-subtitle">
-              AI-Powered Recruiting Platform — Analyze resumes, rank candidates, and discover skill gaps instantly.
-            </p>
-          </div>
-          <button
-            className="theme-toggle-btn"
-            onClick={toggleDarkMode}
-            title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          >
-            {darkMode ? "\u2600\uFE0F" : "\uD83C\uDF19"}
-          </button>
-        </div>
-      </header>
+      <TabNav
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        darkMode={darkMode}
+        toggleDarkMode={toggleDarkMode}
+        onHistoryToggle={toggleHistory}
+        historyOpen={historyOpen}
+      />
 
-      <TabNav activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* History dropdown panel */}
+      <ErrorBoundary>
+        <AnalysisHistory
+          refreshKey={historyRefreshKey}
+          activeAnalysisId={currentAnalysisId}
+          onSelect={handleHistorySelect}
+          onNewAnalysis={handleNewAnalysis}
+          isOpen={historyOpen}
+          onToggle={toggleHistory}
+        />
+      </ErrorBoundary>
 
-      <div className="app-layout">
-        <ErrorBoundary>
-          <AnalysisHistory
-            refreshKey={historyRefreshKey}
-            activeAnalysisId={currentAnalysisId}
-            onSelect={handleHistorySelect}
-            onNewAnalysis={handleNewAnalysis}
-            isOpen={historyOpen}
-            onToggle={() => setHistoryOpen((o) => !o)}
-          />
-        </ErrorBoundary>
-
-        <main className={`container main-content ${historyOpen ? "with-sidebar" : ""}`}>
-          {activeTab === "analyze" && (
-            <>
-              <section className="input-section">
-                <ErrorBoundary>
-                  <InputSection
-                    onError={setError}
-                    onAnalyze={setLoading}
-                    obtainedReport={handleReportReceived}
-                  />
-                </ErrorBoundary>
-              </section>
-              {error && <div className="error-message">{error}</div>}
-              {loading && (
-                <div className="loading-overlay">
-                  <div className="spinner-container">
-                    <div className="spinner"></div>
-                    <p className="loading-text">Analyzing your profile...</p>
-                    <p className="loading-subtext">Parsing resume...</p>
-                  </div>
+      <main className="container main-content">
+        {activeTab === "analyze" && (
+          <>
+            <section className="input-section">
+              <ErrorBoundary>
+                <InputSection
+                  onError={setError}
+                  onAnalyze={setLoading}
+                  obtainedReport={handleReportReceived}
+                />
+              </ErrorBoundary>
+            </section>
+            {error && <div className="error-message">{error}</div>}
+            {loading && (
+              <div className="loading-overlay">
+                <div className="spinner-container">
+                  <div className="spinner"></div>
+                  <p className="loading-text">Analyzing your profile...</p>
+                  <p className="loading-subtext">Parsing resume...</p>
                 </div>
-              )}
-              {report && (
-                <ErrorBoundary>
-                  <Results report={report} />
-                </ErrorBoundary>
-              )}
-            </>
-          )}
+              </div>
+            )}
+            {report && (
+              <ErrorBoundary>
+                <Results report={report} />
+              </ErrorBoundary>
+            )}
+          </>
+        )}
 
-          <ErrorBoundary>
-            <Suspense fallback={<TabFallback />}>
-              {activeTab === "batch" && <BatchUpload />}
-              {activeTab === "candidates" && <CandidatesList />}
-              {activeTab === "rankings" && <RankingsView />}
-              {activeTab === "compare" && <CompareView />}
-              {activeTab === "jd-parser" && <JDParser />}
-              {activeTab === "dashboard" && <DashboardStats />}
-            </Suspense>
-          </ErrorBoundary>
-        </main>
-      </div>
+        <ErrorBoundary>
+          <Suspense fallback={<TabFallback />}>
+            {activeTab === "batch" && <BatchUpload />}
+            {activeTab === "candidates" && <CandidatesList />}
+            {activeTab === "rankings" && <RankingsView />}
+            {activeTab === "compare" && <CompareView />}
+            {activeTab === "jd-parser" && <JDParser />}
+            {activeTab === "dashboard" && <DashboardStats />}
+          </Suspense>
+        </ErrorBoundary>
+      </main>
 
       <footer className="app-footer">
         <div className="container">
           <p>Automated Recruiting Platform &mdash; Powered by FastAPI, Scikit-learn &amp; spaCy</p>
           <p className="shortcuts-hint">
-            Shortcuts: Alt+1-{getVisibleTabs(userRole).length} tabs | Alt+N new | Alt+D dark mode | Esc clear | Ctrl+Enter submit
+            Shortcuts: Alt+1-{getVisibleTabs(userRole).length} tabs | Alt+N new | Alt+H history | Alt+D dark mode | Esc clear
           </p>
         </div>
       </footer>
