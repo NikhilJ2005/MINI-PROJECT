@@ -105,6 +105,10 @@ class SkillGapAnalyzer:
             required_skills = [_normalize_skill(s, self._canonical_map) for s in required_skills]
             nice_to_have = [_normalize_skill(s, self._canonical_map) for s in nice_to_have]
 
+        # Deduplicate skill lists (normalization may create duplicates)
+        required_skills = list(dict.fromkeys(required_skills))
+        nice_to_have = [s for s in dict.fromkeys(nice_to_have) if s not in required_skills]
+
         # --- Step 2: Build the combined skill set ---
         # Union of everything the candidate has shown in any source
         all_combined = set(claimed_skills) | set(demonstrated_skills)
@@ -181,7 +185,7 @@ class SkillGapAnalyzer:
         present_required = total_required - len(missing_required)
 
         if total_required > 0:
-            match_score = round((present_required / total_required) * 100, 1)
+            match_score = round(min(present_required / total_required, 1.0) * 100, 1)
         else:
             match_score = 0.0
 
@@ -213,7 +217,7 @@ class SkillGapAnalyzer:
         # --- Step 6: Calculate nice-to-have score ---
         total_nice = len(nice_to_have)
         present_nice = total_nice - len(missing_nice_to_have)
-        nice_to_have_score = round((present_nice / total_nice) * 100, 1) if total_nice > 0 else 0.0
+        nice_to_have_score = round(min(present_nice / total_nice, 1.0) * 100, 1) if total_nice > 0 else 0.0
 
         # --- Step 7: Calculate composite ranking score ---
         # Weighted formula combining multiple signals:
@@ -234,7 +238,7 @@ class SkillGapAnalyzer:
             unverified_ratio = len(claims_not_proven) / max(total_present, 1)
             claim_penalty_score = max(0.0, 100.0 - (unverified_ratio * 50.0))
 
-        composite_score = round(
+        composite_score = min(100.0, round(
             match_score * 0.45 +
             nice_to_have_score * 0.15 +
             confidence * 0.15 +
@@ -242,7 +246,7 @@ class SkillGapAnalyzer:
             strong_ratio * 0.10 +
             claim_penalty_score * 0.05,
             1
-        )
+        ))
 
         logger.info(f"[SkillGapAnalyzer] Match: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}% | Composite: {composite_score}%")
         logger.debug(f"[SkillGapAnalyzer] Missing required: {missing_required}")

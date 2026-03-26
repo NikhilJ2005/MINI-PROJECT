@@ -15,7 +15,7 @@ function SkillRadarChart({ report }) {
     skill: skill.skill.length > 12 ? skill.skill.slice(0, 12) + "…" : skill.skill,
     resume: skill.in_resume ? 100 : 0,
     github: skill.in_github ? 100 : 0,
-    confidence: skill.probability != null ? Math.round(skill.probability * 100) : 0,
+    confidence: skill.evidence_strength != null ? Math.round(skill.evidence_strength) : skill.probability != null ? Math.round(skill.probability * 100) : 0,
   }));
 
   return (

@@ -3,7 +3,7 @@ import ConfidenceBar from "./ConfidenceBar";
 
 function SkillTable({ title, analysis }) {
     if (!analysis) return null;
-    const showConfidence = analysis.some((item) => item.probability !== undefined);
+    const showConfidence = analysis.some((item) => item.evidence_strength !== undefined || item.probability !== undefined);
 
     return (
         <div className="card">
@@ -16,7 +16,7 @@ function SkillTable({ title, analysis }) {
                             <th>Status</th>
                             <th>In Resume</th>
                             <th>On GitHub</th>
-                            {showConfidence && <th>ML Confidence</th>}
+                            {showConfidence && <th>Evidence Strength</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -48,7 +48,9 @@ function SkillTable({ title, analysis }) {
                                 </td>
                                 {showConfidence && (
                                     <td>
-                                        {item.probability != null ? (
+                                        {item.evidence_strength != null ? (
+                                            <ConfidenceBar probability={item.evidence_strength / 100} />
+                                        ) : item.probability != null ? (
                                             <ConfidenceBar probability={item.probability} />
                                         ) : (
                                             "-"
