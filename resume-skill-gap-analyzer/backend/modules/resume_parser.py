@@ -15,11 +15,88 @@
 """
 
 import re
+import unicodedata
 from typing import Dict, List, Optional
 
 import fitz  # PyMuPDF — high-performance PDF text extraction
 import spacy
 from loguru import logger
+
+
+def normalize_pdf_text(text: str) -> str:
+    """
+    Normalize Unicode characters commonly found in PDF-extracted text.
+
+    PDFs often contain special Unicode characters that break regex matching:
+    - Non-breaking spaces (U+00A0) instead of regular spaces
+    - En/em dashes instead of hyphens
+    - Smart quotes instead of straight quotes
+    - Ligatures (fi, fl, ff, ffi, ffl)
+    - Zero-width characters
+    - Various Unicode whitespace characters
+
+    This normalization ensures skill-matching regex patterns can find skills
+    even when the PDF uses non-standard characters.
+    """
+    # Replace Unicode dashes with regular hyphen
+    text = text.replace('\u2010', '-')  # Hyphen
+    text = text.replace('\u2011', '-')  # Non-breaking hyphen
+    text = text.replace('\u2012', '-')  # Figure dash
+    text = text.replace('\u2013', '-')  # En dash
+    text = text.replace('\u2014', '-')  # Em dash
+    text = text.replace('\u2015', '-')  # Horizontal bar
+    text = text.replace('\u2212', '-')  # Minus sign
+    text = text.replace('\uFE58', '-')  # Small em dash
+    text = text.replace('\uFE63', '-')  # Small hyphen-minus
+    text = text.replace('\uFF0D', '-')  # Fullwidth hyphen-minus
+
+    # Replace Unicode whitespace with regular space
+    text = text.replace('\u00A0', ' ')  # Non-breaking space
+    text = text.replace('\u2000', ' ')  # En quad
+    text = text.replace('\u2001', ' ')  # Em quad
+    text = text.replace('\u2002', ' ')  # En space
+    text = text.replace('\u2003', ' ')  # Em space
+    text = text.replace('\u2004', ' ')  # Three-per-em space
+    text = text.replace('\u2005', ' ')  # Four-per-em space
+    text = text.replace('\u2006', ' ')  # Six-per-em space
+    text = text.replace('\u2007', ' ')  # Figure space
+    text = text.replace('\u2008', ' ')  # Punctuation space
+    text = text.replace('\u2009', ' ')  # Thin space
+    text = text.replace('\u200A', ' ')  # Hair space
+    text = text.replace('\u202F', ' ')  # Narrow no-break space
+    text = text.replace('\u205F', ' ')  # Medium mathematical space
+    text = text.replace('\u3000', ' ')  # Ideographic space
+
+    # Remove zero-width characters
+    text = text.replace('\u200B', '')   # Zero-width space
+    text = text.replace('\u200C', '')   # Zero-width non-joiner
+    text = text.replace('\u200D', '')   # Zero-width joiner
+    text = text.replace('\uFEFF', '')   # BOM / zero-width no-break space
+
+    # Replace smart quotes with straight quotes
+    text = text.replace('\u2018', "'")  # Left single quote
+    text = text.replace('\u2019', "'")  # Right single quote
+    text = text.replace('\u201C', '"')  # Left double quote
+    text = text.replace('\u201D', '"')  # Right double quote
+
+    # Replace common ligatures
+    text = text.replace('\uFB00', 'ff')   # ff ligature
+    text = text.replace('\uFB01', 'fi')   # fi ligature
+    text = text.replace('\uFB02', 'fl')   # fl ligature
+    text = text.replace('\uFB03', 'ffi')  # ffi ligature
+    text = text.replace('\uFB04', 'ffl')  # ffl ligature
+
+    # Replace fullwidth Latin letters with ASCII (common in some PDFs)
+    text = text.replace('\uFF0B', '+')  # Fullwidth plus
+    text = text.replace('\uFF03', '#')  # Fullwidth hash
+
+    # Normalize remaining Unicode to NFKC form (decomposes compatibility chars)
+    text = unicodedata.normalize('NFKC', text)
+
+    # Collapse multiple spaces into one
+    text = re.sub(r' {2,}', ' ', text)
+
+    return text
 
 
 def compile_skill_patterns(
@@ -145,6 +222,10 @@ class ResumeParser:
 
             page_count = len(doc)
             doc.close()
+
+            # Normalize Unicode chars (PDFs often have non-breaking spaces,
+            # special dashes, ligatures etc. that break skill regex matching)
+            text = normalize_pdf_text(text)
             logger.info(f"[ResumeParser] Extracted text from PDF ({page_count} pages).")
 
         except Exception as e:
@@ -164,6 +245,7 @@ class ResumeParser:
             doc = Document(io.BytesIO(file_bytes))
             paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
             text = "\n".join(paragraphs)
+            text = normalize_pdf_text(text)
             logger.info(f"[ResumeParser] Extracted text from DOCX ({len(paragraphs)} paragraphs).")
             return text.strip()
         except Exception as e:

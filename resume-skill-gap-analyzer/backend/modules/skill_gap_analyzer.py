@@ -114,8 +114,15 @@ class SkillGapAnalyzer:
                      f"{len(required_skills)} required={required_skills[:5]}")
 
         # --- Step 2: Build the combined skill set ---
-        # Union of everything the candidate has shown in any source
-        all_combined = set(claimed_skills) | set(demonstrated_skills)
+        # Use sets for O(1) lookup instead of O(n) list scan
+        claimed_set = set(claimed_skills)
+        demonstrated_set = set(demonstrated_skills)
+        all_combined = claimed_set | demonstrated_set
+
+        # Build case-insensitive lookup maps as fallback
+        # (handles edge cases where skill casing differs between sources)
+        claimed_lower = {s.lower(): s for s in claimed_skills}
+        demonstrated_lower = {s.lower(): s for s in demonstrated_skills}
 
         # --- Step 3: Classify each required skill ---
         required_analysis = []
@@ -125,8 +132,9 @@ class SkillGapAnalyzer:
         hidden_strengths = []
 
         for i, skill in enumerate(required_skills):
-            in_resume = skill in claimed_skills
-            in_github = skill in demonstrated_skills
+            # Primary: exact match. Fallback: case-insensitive match.
+            in_resume = skill in claimed_set or skill.lower() in claimed_lower
+            in_github = skill in demonstrated_set or skill.lower() in demonstrated_lower
 
             # Determine skill status based on evidence from both sources
             if in_resume and in_github:
@@ -162,8 +170,8 @@ class SkillGapAnalyzer:
         missing_nice_to_have = []
 
         for skill in nice_to_have:
-            in_resume = skill in claimed_skills
-            in_github = skill in demonstrated_skills
+            in_resume = skill in claimed_set or skill.lower() in claimed_lower
+            in_github = skill in demonstrated_set or skill.lower() in demonstrated_lower
 
             if in_resume and in_github:
                 status = "strong"
@@ -254,6 +262,15 @@ class SkillGapAnalyzer:
 
         logger.info(f"[SkillGapAnalyzer] Match: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}% | Composite: {composite_score}%")
         logger.debug(f"[SkillGapAnalyzer] Missing required: {missing_required}")
+
+        # Debug logging for 0% scores to help diagnose issues
+        if match_score == 0 and total_required > 0:
+            logger.warning(
+                f"[SCORE_DEBUG] match_score=0% but {total_required} skills required! "
+                f"Required: {required_skills} | "
+                f"Claimed ({len(claimed_skills)}): {claimed_skills[:10]} | "
+                f"Demonstrated ({len(demonstrated_skills)}): {demonstrated_skills[:10]}"
+            )
 
         # --- Step 8: Compile and return the full analysis ---
         return {
