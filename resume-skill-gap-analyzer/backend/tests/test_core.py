@@ -304,10 +304,13 @@ class TestSkillGapAnalyzer:
 
         # Check statuses
         statuses = {r["skill"]: r["status"] for r in result["required_analysis"]}
-        assert statuses["Python"] == "strong"  # in both
-        assert statuses["React"] == "claimed_only"  # only resume
-        assert statuses["Docker"] == "demonstrated_only"  # only github
-        assert statuses["AWS"] == "missing"  # in neither
+        assert statuses["Python"] == "strong"       # in both resume and GitHub
+        assert statuses["React"] == "claimed_only"  # only in resume
+        assert statuses["Docker"] == "unclaimed"    # only on GitHub (not claimed on resume)
+        assert statuses["AWS"] == "missing"         # in neither source
+
+        # Unclaimed required skills are tracked separately
+        assert "Docker" in result["unclaimed_required"]
 
     def _run_analyzer(self, claimed, demonstrated, required):
         """Helper: run the analyzer with minimal scaffolding."""
@@ -347,27 +350,30 @@ class TestSkillGapAnalyzer:
         assert result["match_score"] < 100.0
 
     def test_match_score_equals_100_only_when_all_required_present(self):
-        """match_score should be 100 when no required skills are missing."""
+        """match_score should be 100 only when all required skills are 'strong' (resume+GitHub)."""
         result = self._run_analyzer(
-            claimed=["Python", "React"],
-            demonstrated=["Python", "Docker"],
+            claimed=["Python", "React", "Docker"],
+            demonstrated=["Python", "React", "Docker"],
             required=["Python", "React", "Docker"],
         )
         assert result["missing_required"] == []
+        assert result["unclaimed_required"] == []
         assert result["match_score"] == 100.0
 
     def test_match_score_consistency(self):
-        """present_required + len(missing_required) must equal total_required."""
+        """match_score uses weighted formula: strong=1.0, claimed_only=0.4, unclaimed/missing=0."""
         result = self._run_analyzer(
             claimed=["Python"],
             demonstrated=["Docker"],
             required=["Python", "Docker", "AWS", "TypeScript"],
         )
-        total_required = 4
-        missing_count = len(result["missing_required"])
-        present_required = total_required - missing_count
-        expected_score = round((present_required / total_required) * 100, 1)
+        # Python=claimed_only (0.4 credit), Docker=unclaimed (0 credit),
+        # AWS=missing (0), TypeScript=missing (0)
+        expected_score = round(100 * (1 * 0.4) / 4, 1)  # = 10.0
         assert result["match_score"] == expected_score
+        assert "Docker" in result["unclaimed_required"]
+        assert "AWS" in result["missing_required"]
+        assert "TypeScript" in result["missing_required"]
 
     def test_match_score_zero_when_all_required_missing(self):
         """match_score should be 0 when none of the required skills are present."""
