@@ -1,6 +1,6 @@
 import "./cssFile/ScoreCard.css";
 function ScoreCard({ report }) {
-    const score = Math.min(100, Math.round(report?.skill_breakdown?.confidence_score ?? 0));
+    const score = Math.min(100, Math.round(report?.executive_summary?.match_score ?? report?.skill_breakdown?.match_score ?? 0));
     const label = report?.executive_summary?.match_label ?? "";
     const targetRole = report?.target_role ?? "";
     const candidateName = report.candidate_info?.name || report.executive_summary?.candidate_name || "";
