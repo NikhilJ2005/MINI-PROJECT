@@ -582,6 +582,12 @@ async def analyze(
     claimed_skills = resume_result["extracted_skills"]
     personal_info = resume_result.get("personal_info", {})
 
+    logger.info(f"RESUME PARSED | Skills extracted: {len(claimed_skills)} | "
+                f"Text length: {len(resume_result.get('raw_text', ''))} chars")
+    if len(claimed_skills) == 0:
+        logger.warning(f"[SCORE_DEBUG] Zero skills extracted from resume '{filename}'. "
+                       f"Text preview: {resume_result.get('raw_text', '')[:200]!r}")
+
     # Auto-detect GitHub from resume if not provided
     if not github_username and personal_info.get("github_username"):
         github_username = personal_info["github_username"]
