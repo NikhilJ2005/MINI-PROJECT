@@ -342,6 +342,7 @@ async def _run_single_analysis(
         report["github_insights"]["commit_activity"] = github_result["commit_activity"]
 
     # --- Groq LLM-powered enhancements (optional, runs only if GROQ_API_KEY is set) ---
+    required_skills = role_data.get("required_skills", [])
     if groq_available():
         try:
             # AI Resume Coach feedback
@@ -351,6 +352,9 @@ async def _run_single_analysis(
                 missing_skills=analysis["missing_required"],
                 strengths=analysis["strengths"],
                 match_score=analysis["match_score"],
+                composite_score=analysis.get("composite_score"),
+                claims_not_proven=analysis.get("claims_not_proven", []),
+                required_skills=required_skills,
             )
             if ai_feedback:
                 report["ai_feedback"] = ai_feedback
@@ -361,6 +365,9 @@ async def _run_single_analysis(
                 claimed_skills=claimed_skills,
                 missing_skills=analysis["missing_required"],
                 claims_not_proven=analysis.get("claims_not_proven", []),
+                resume_text=resume_text,
+                github_insights=report.get("github_insights"),
+                required_skills=required_skills,
             )
             if ai_questions:
                 report["ai_interview_questions"] = ai_questions
@@ -371,6 +378,8 @@ async def _run_single_analysis(
                 target_role=target_role,
                 missing_skills=analysis["missing_required"] + analysis.get("missing_nice_to_have", []),
                 current_skills=all_candidate_skills,
+                resume_text=resume_text,
+                match_score=analysis["match_score"],
             )
             if ai_learning_path:
                 # Enrich with real URLs from Serper if available
@@ -392,6 +401,9 @@ async def _run_single_analysis(
                 strengths=analysis["strengths"],
                 missing_skills=analysis["missing_required"],
                 github_insights=report.get("github_insights"),
+                composite_score=analysis.get("composite_score"),
+                hidden_strengths=analysis.get("hidden_strengths", []),
+                claims_not_proven=analysis.get("claims_not_proven", []),
             )
             if ai_summary:
                 report["ai_candidate_summary"] = ai_summary
@@ -424,6 +436,9 @@ async def _run_single_analysis(
                 claims_not_proven=analysis.get("claims_not_proven", []),
                 hidden_strengths=analysis.get("hidden_strengths", []),
                 github_insights=report.get("github_insights"),
+                resume_text=resume_text,
+                required_skills=required_skills,
+                composite_score=analysis.get("composite_score"),
             )
             if ai_role_fit:
                 report["ai_role_fit_narrative"] = ai_role_fit
