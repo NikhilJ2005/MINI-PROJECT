@@ -8,10 +8,16 @@
    requirements — then computes a comprehensive gap analysis.
 
  Key metrics computed:
-   - match_score:   Percentage of required skills the candidate has (0-100)
-   - gap_score:     Percentage of required skills missing (0-100)
+   - match_score:   Recruiter-friendly Role Fit Score (0-100).
+                    Strong (resume+GitHub) = 1.0 weight,
+                    Claimed-only (resume only) = 0.4 weight,
+                    Unclaimed (GitHub only) = 0 weight (visible but no credit),
+                    Missing = 0 weight.
+   - gap_score:     100 - match_score
+   - proof_rate:    Of required skills the candidate claims, % also on GitHub
    - confidence:    ML model's average confidence in the candidate's skills
-   - Per-skill status: strong / claimed_only / demonstrated_only / missing
+   - Per-skill status: strong / claimed_only / unclaimed / missing
+                       (nice-to-have skills also use: demonstrated_only)
 =============================================================================
 """
 
@@ -66,18 +72,20 @@ class SkillGapAnalyzer:
         Perform a full skill gap analysis for a candidate against a target role.
 
         Business logic for skill status classification:
-          - "strong":            Skill found in BOTH resume AND GitHub
-                                 → Strongest evidence — candidate has coded it AND claims it
-          - "claimed_only":      Skill found in resume but NOT on GitHub
-                                 → Candidate claims it but hasn't demonstrated it publicly
-          - "demonstrated_only": Skill found on GitHub but NOT in resume
-                                 → Hidden strength — candidate uses it but didn't highlight it
-          - "missing":           Skill found in NEITHER source
-                                 → This is a gap that needs to be addressed
+          - "strong":      Skill found in BOTH resume AND GitHub
+                           → Full credit (1.0) — claimed and demonstrated
+          - "claimed_only": Skill found in resume but NOT on GitHub
+                           → Partial credit (0.4) — claimed, not yet proven
+          - "unclaimed":   Skill found on GitHub but NOT in resume (required skills only)
+                           → Zero credit — not positioned by the candidate for this role
+          - "missing":     Skill found in NEITHER source
+                           → Zero credit — explicit gap
+          For nice-to-have skills, github-only keeps status "demonstrated_only".
 
-        Scoring:
-          - match_score = (present_required / total_required) * 100
+        Scoring (recruiter-friendly Role Fit):
+          - match_score = 100 * (strong*1.0 + claimed_only*0.4) / total_required
           - gap_score   = 100 - match_score
+          - proof_rate  = 100 * strong / max(strong + claimed_only, 1)
           - confidence  = average ML probability for present required skills
 
         Args:
@@ -131,13 +139,18 @@ class SkillGapAnalyzer:
         strengths = []
         claims_not_proven = []
         hidden_strengths = []
+        unclaimed_required = []
 
         for i, skill in enumerate(required_skills):
             # Primary: exact match. Fallback: case-insensitive match.
             in_resume = skill in claimed_set or skill.lower() in claimed_lower
             in_github = skill in demonstrated_set or skill.lower() in demonstrated_lower
 
-            # Determine skill status based on evidence from both sources
+            # Determine skill status based on evidence from both sources.
+            # Recruiter-friendly rule: a required skill found only on GitHub
+            # (not claimed on the resume) is labelled "unclaimed" and earns
+            # zero score credit, because the candidate did not position
+            # themselves as having that skill.
             if in_resume and in_github:
                 status = "strong"
                 strengths.append(skill)
@@ -145,8 +158,8 @@ class SkillGapAnalyzer:
                 status = "claimed_only"
                 claims_not_proven.append(skill)
             elif not in_resume and in_github:
-                status = "demonstrated_only"
-                hidden_strengths.append(skill)
+                status = "unclaimed"
+                unclaimed_required.append(skill)
             else:
                 status = "missing"
                 missing_required.append(skill)
@@ -193,20 +206,37 @@ class SkillGapAnalyzer:
 
         # --- Step 5: Calculate overall scores ---
 
-        # Match score: what percentage of REQUIRED skills does the candidate have?
-        # present_required is derived directly from missing_required so that
-        # present_required + len(missing_required) == total_required always holds.
-        # This prevents over-counting (e.g. non-required skills inflating the score).
+        # Recruiter-friendly Role Fit Score:
+        #   strong      (resume ✅ + github ✅) → full credit   (1.0)
+        #   claimed_only (resume ✅ + github ❌) → partial credit (0.4)
+        #   unclaimed   (resume ❌ + github ✅) → no credit     (0.0)
+        #   missing     (resume ❌ + github ❌) → no credit     (0.0)
+        # The score reflects only what the candidate has positioned
+        # themselves as having; unclaimed GitHub skills do not inflate it.
         total_required = len(required_skills)
-        present_required = max(0, total_required - len(missing_required))
+        strong_count = len(strengths)
+        claimed_only_count = len(claims_not_proven)
 
         if total_required > 0:
-            match_score = round((present_required / total_required) * 100, 1)
+            role_fit_score = round(
+                100 * (strong_count * 1.0 + claimed_only_count * 0.4) / total_required, 1
+            )
         else:
-            match_score = 0.0
+            role_fit_score = 0.0
+
+        match_score = role_fit_score  # match_score is the recruiter-friendly role fit score
 
         # Gap score: inverse of match score
         gap_score = round(100 - match_score, 1)
+
+        # Proof rate: of the required skills the candidate claims,
+        # what fraction are also evidenced on GitHub?
+        proof_rate = round(
+            100 * strong_count / max(strong_count + claimed_only_count, 1), 1
+        )
+
+        # present_required counts skills that earn any credit (strong or claimed_only)
+        present_required = strong_count + claimed_only_count
 
         # Confidence score: average ML probability across ALL required skills
         # This gives an unbiased view of how confident the ML model is overall
@@ -234,7 +264,9 @@ class SkillGapAnalyzer:
         #   10% GitHub evidence bonus (ratio of demonstrated skills)
         #   10% verification strength (ratio of "strong" skills)
         #    5% claim penalty (penalize heavy resume-only claims)
-        github_skill_count = len(strengths) + len(hidden_strengths)
+        # Note: unclaimed_required skills (github-only required) do not
+        # contribute to github_bonus since the candidate didn't claim them.
+        github_skill_count = len(strengths)  # only strong (resume+GitHub) skills count
         total_present = present_required + present_nice
         github_bonus = min(100.0, (github_skill_count / max(total_required, 1)) * 100)
         strong_ratio = (len(strengths) / max(total_present, 1)) * 100 if total_present > 0 else 0.0
@@ -270,8 +302,8 @@ class SkillGapAnalyzer:
                 1
             ))
 
-        logger.info(f"[SkillGapAnalyzer] Match: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}% | Composite: {composite_score}%")
-        logger.debug(f"[SkillGapAnalyzer] Missing required: {missing_required}")
+        logger.info(f"[SkillGapAnalyzer] RoleFit: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}% | Composite: {composite_score}% | ProofRate: {proof_rate}%")
+        logger.debug(f"[SkillGapAnalyzer] Missing required: {missing_required} | Unclaimed required: {unclaimed_required}")
 
         # Consistency guard: match_score must be < 100 when any required skill is missing.
         if match_score == 100.0 and missing_required:
@@ -295,6 +327,8 @@ class SkillGapAnalyzer:
             "confidence": confidence,
             "composite_score": composite_score,
             "nice_to_have_score": nice_to_have_score,
+            "proof_rate": proof_rate,
+            "unclaimed_required": unclaimed_required,
             "required_analysis": required_analysis,
             "nice_to_have_analysis": nice_to_have_analysis,
             "missing_required": missing_required,

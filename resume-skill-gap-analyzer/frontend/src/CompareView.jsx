@@ -180,6 +180,7 @@ function statusIcon(status) {
     case "strong": return "✔✔";
     case "claimed_only": return "✔";
     case "demonstrated_only": return "⚙";
+    case "unclaimed": return "◈";
     case "missing": return "✘";
     default: return "?";
   }

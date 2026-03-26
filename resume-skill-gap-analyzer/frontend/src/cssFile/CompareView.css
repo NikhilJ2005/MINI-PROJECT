@@ -199,6 +199,10 @@
   color: var(--color-demonstrated);
 }
 
+.status-dot.unclaimed {
+  color: var(--color-unclaimed, #7c3aed);
+}
+
 .status-dot.missing {
   color: var(--color-missing);
 }

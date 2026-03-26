@@ -93,6 +93,11 @@
     color: var(--color-demonstrated, #2563eb);
 }
 
+.status-unclaimed {
+    background: var(--color-unclaimed-bg, #ede9fe);
+    color: var(--color-unclaimed, #7c3aed);
+}
+
 .status-missing {
     background: var(--color-missing-bg, #fee2e2);
     color: var(--color-missing, #dc2626);
@@ -101,6 +106,7 @@
 .badge-strong { background: var(--color-strong-bg); color: var(--color-strong); }
 .badge-claimed_only { background: var(--color-claimed-bg); color: var(--color-claimed); }
 .badge-demonstrated_only { background: var(--color-demonstrated-bg); color: var(--color-demonstrated); }
+.badge-unclaimed { background: var(--color-unclaimed-bg, #ede9fe); color: var(--color-unclaimed, #7c3aed); }
 .badge-missing { background: var(--color-missing-bg); color: var(--color-missing); }
 
 /* Check / X indicators */

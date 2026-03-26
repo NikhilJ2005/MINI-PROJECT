@@ -71,6 +71,7 @@ function getStatusIcon(status) {
         case "strong": return "✓";
         case "claimed_only": return "◐";
         case "demonstrated_only": return "◑";
+        case "unclaimed": return "◈";
         case "missing": return "✕";
         default: return "?";
     }
@@ -81,6 +82,7 @@ function getStatusTooltip(status) {
         case "strong": return "Found in both resume and GitHub — strong evidence";
         case "claimed_only": return "Listed on resume but not found on GitHub";
         case "demonstrated_only": return "Found on GitHub but not listed on resume";
+        case "unclaimed": return "Found on GitHub but not claimed on resume — does not count toward role fit score";
         case "missing": return "Not found in resume or GitHub — skill gap";
         default: return "";
     }
@@ -92,6 +94,7 @@ function formatStatus(status) {
         case "claimed_only": return "Claimed";
         case "missing": return "Missing";
         case "demonstrated_only": return "Demo Only";
+        case "unclaimed": return "Unclaimed";
         default: return status;
     }
 }
