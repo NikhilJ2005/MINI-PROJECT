@@ -4,7 +4,7 @@ function Summary({summary}){
         {value:summary.total_resume_skills,label:"Resume Skills"},
         {value:summary.total_github_skills,label:"GitHub Skills"},
         {value:summary.missing_critical_skills,label:"Missing Critical Skills"},
-        {value:Number(summary?.confidence_score ?? 0).toFixed(1) + "%",label:"ML Confidence"},
+        {value:Number(summary?.match_score ?? 0).toFixed(1) + "%",label:"ML Confidence"},
     ]
     return(
         <div className="summary-grid">
