@@ -26,7 +26,6 @@
 
 /* --- Drag & Drop Zone --- */
 .batch-drop-zone {
-  width: 100%;
   padding: var(--space-8) var(--space-5);
   border: 2px dashed var(--border-light);
   border-radius: var(--radius-lg);
