@@ -6,6 +6,7 @@ import TabNav from "./TabNav";
 import RoleSelector from "./RoleSelector";
 import InputSection from "./InputSection";
 import Results from "./Results";
+import CodeChallenge from "./CodeChallenge";
 import AnalysisHistory from "./AnalysisHistory";
 import ToastContainer from "./Toast";
 import ErrorBoundary from "./ErrorBoundary";
@@ -199,6 +200,15 @@ function App() {
             {report && (
               <ErrorBoundary>
                 <Results report={report} />
+              </ErrorBoundary>
+            )}
+            {report && userRole === "candidate" && (
+              <ErrorBoundary>
+                <CodeChallenge
+                  targetRole={report.target_role}
+                  candidateId={report.candidate_id}
+                  analysisId={report.analysis_id}
+                />
               </ErrorBoundary>
             )}
           </>

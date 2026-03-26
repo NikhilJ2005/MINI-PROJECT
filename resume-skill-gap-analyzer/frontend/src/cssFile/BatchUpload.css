@@ -277,3 +277,25 @@
   margin-bottom: 6px;
   font-size: 0.85rem;
 }
+
+/* --- Code Files Upload Zone --- */
+.batch-code-drop-zone {
+  border-color: #8b5cf6;
+}
+
+.batch-code-drop-zone:hover,
+.batch-code-drop-zone.dragging {
+  border-color: #7c3aed;
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.batch-code-desc {
+  font-size: 0.88rem;
+  color: var(--text-gray);
+  margin-bottom: 8px;
+}
+
+[data-theme="dark"] .batch-code-drop-zone:hover,
+[data-theme="dark"] .batch-code-drop-zone.dragging {
+  background: rgba(139, 92, 246, 0.1);
+}
