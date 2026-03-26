@@ -263,6 +263,7 @@ class ReportGenerator:
             "missing_critical_skills": len(analysis_result["missing_required"]),
             "confidence_rating": self._get_confidence_rating(confidence),
             "confidence_score": confidence,
+            "composite_score": analysis_result.get("composite_score", 0),
         }
 
         # --- Recommendations ---
@@ -338,6 +339,8 @@ class ReportGenerator:
                 "match_score": analysis_result["match_score"],
                 "gap_score": analysis_result["gap_score"],
                 "confidence": analysis_result["confidence"],
+                "composite_score": analysis_result.get("composite_score", 0),
+                "nice_to_have_score": analysis_result.get("nice_to_have_score", 0),
                 "required_analysis": analysis_result["required_analysis"],
                 "nice_to_have_analysis": analysis_result["nice_to_have_analysis"],
                 "missing_required": analysis_result["missing_required"],
