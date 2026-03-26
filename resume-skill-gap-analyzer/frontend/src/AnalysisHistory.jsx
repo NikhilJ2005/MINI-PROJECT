@@ -1,22 +1,27 @@
-import { useState, useEffect, useRef, memo } from "react";
+import { useState, useEffect, memo } from "react";
 import "./cssFile/AnalysisHistory.css";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
-function relativeTime(timestamp) {
-  if (!timestamp) return "—";
-  const now = Date.now();
-  const then = timestamp * 1000;
-  const diff = now - then;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  return new Date(then).toLocaleDateString([], { month: "short", day: "numeric" });
+function groupByDate(analyses) {
+  const now = new Date();
+  const today = now.toDateString();
+  const yesterday = new Date(now - 86400000).toDateString();
+  const weekAgo = new Date(now - 7 * 86400000).getTime();
+
+  const groups = { Today: [], Yesterday: [], "This Week": [], Earlier: [] };
+
+  for (const a of analyses) {
+    if (!a.analyzed_at) { groups.Earlier.push(a); continue; }
+    const d = new Date(a.analyzed_at * 1000);
+    const ds = d.toDateString();
+    if (ds === today) groups.Today.push(a);
+    else if (ds === yesterday) groups.Yesterday.push(a);
+    else if (d.getTime() > weekAgo) groups["This Week"].push(a);
+    else groups.Earlier.push(a);
+  }
+
+  return Object.entries(groups).filter(([, items]) => items.length > 0);
 }
 
 function scoreColor(score) {
@@ -36,30 +41,10 @@ const AnalysisHistory = memo(function AnalysisHistory({
   const [analyses, setAnalyses] = useState([]);
   const [loadingId, setLoadingId] = useState(null);
   const [fetchError, setFetchError] = useState(false);
-  const dropdownRef = useRef(null);
 
   useEffect(() => {
     fetchHistory();
   }, [refreshKey]);
-
-  // Close on outside click
-  useEffect(() => {
-    if (!isOpen) return;
-    function handleClick(e) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        onToggle();
-      }
-    }
-    function handleEsc(e) {
-      if (e.key === "Escape") onToggle();
-    }
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleEsc);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, [isOpen, onToggle]);
 
   async function fetchHistory() {
     try {
@@ -81,7 +66,6 @@ const AnalysisHistory = memo(function AnalysisHistory({
       if (res.ok) {
         const report = await res.json();
         onSelect(report, analysisId);
-        onToggle(); // close dropdown after selection
       }
     } catch (err) {
       console.error("Failed to load analysis:", err);
@@ -90,56 +74,70 @@ const AnalysisHistory = memo(function AnalysisHistory({
     }
   }
 
-  if (!isOpen) return null;
+  const grouped = groupByDate(analyses);
 
   return (
     <>
-      <div className="history-backdrop" />
-      <div className="history-dropdown" ref={dropdownRef}>
-        <div className="history-dropdown-header">
-          <h3>Recent Analyses</h3>
-          <div className="history-dropdown-actions">
-            <button className="new-analysis-btn" onClick={() => { onNewAnalysis(); onToggle(); }}>
-              + New Analysis
-            </button>
-            <button className="history-close-btn" onClick={onToggle}>
-              ✕
-            </button>
-          </div>
+      <button
+        className={`history-toggle ${isOpen ? "open" : ""}`}
+        onClick={onToggle}
+        title={isOpen ? "Hide history" : "Show history"}
+      >
+        {isOpen ? "\u2039" : "\u203A"}
+      </button>
+
+      <aside className={`history-sidebar ${isOpen ? "open" : "closed"}`}>
+        <div className="history-header">
+          <h3>History</h3>
+          <button className="new-analysis-btn" onClick={onNewAnalysis}>
+            + New
+          </button>
         </div>
 
         {fetchError ? (
           <p className="history-empty">Could not load history.</p>
         ) : analyses.length === 0 ? (
-          <p className="history-empty">No analyses yet. Upload a resume to get started.</p>
+          <p className="history-empty">No analyses yet.</p>
         ) : (
-          <div className="history-grid">
-            {analyses.map((a) => (
-              <div
-                key={a.analysis_id}
-                className={`history-card ${
-                  activeAnalysisId === a.analysis_id ? "active" : ""
-                } ${loadingId === a.analysis_id ? "loading" : ""}`}
-                onClick={() => handleSelect(a.analysis_id)}
-              >
-                <div className="history-card-top">
-                  <span className="history-card-name">
-                    {a.candidate_name || a.resume_filename || "Unknown"}
-                  </span>
-                  <span
-                    className="history-card-score"
-                    style={{ color: scoreColor(a.match_score) }}
+          <div className="history-list">
+            {grouped.map(([group, items]) => (
+              <div key={group}>
+                <div className="history-group-header">{group}</div>
+                {items.map((a) => (
+                  <div
+                    key={a.analysis_id}
+                    className={`history-entry ${
+                      activeAnalysisId === a.analysis_id ? "active" : ""
+                    } ${loadingId === a.analysis_id ? "loading" : ""}`}
+                    onClick={() => handleSelect(a.analysis_id)}
                   >
-                    {Math.round(a.match_score ?? 0)}%
-                  </span>
-                </div>
-                <div className="history-card-role">{a.target_role}</div>
-                <div className="history-card-time">{relativeTime(a.analyzed_at)}</div>
+                    <div className="history-entry-name">
+                      {a.candidate_name || a.resume_filename || "Unknown"}
+                    </div>
+                    <div className="history-entry-meta">
+                      <span className="history-entry-role">{a.target_role}</span>
+                      <span
+                        className="history-entry-score"
+                        style={{ color: scoreColor(a.match_score) }}
+                      >
+                        {Math.round(a.match_score ?? 0)}%
+                      </span>
+                    </div>
+                    <div className="history-entry-time">
+                      {a.analyzed_at
+                        ? new Date(a.analyzed_at * 1000).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—"}
+                    </div>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
         )}
-      </div>
+      </aside>
     </>
   );
 });
