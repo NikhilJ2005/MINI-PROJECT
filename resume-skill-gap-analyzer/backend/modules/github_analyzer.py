@@ -23,6 +23,9 @@ import httpx
 from loguru import logger
 
 from modules.resume_parser import get_compiled_patterns
+from modules.code_quality_analyzer import (
+    is_code_file, should_skip_path, detect_language, analyze_code_quality,
+)
 
 # Semaphore to limit concurrent GitHub API requests
 _github_semaphore = asyncio.Semaphore(10)
@@ -180,6 +183,7 @@ class GitHubAnalyzer:
         self,
         username: str,
         skills_master: Dict[str, List[str]],
+        analyze_code: bool = False,
     ) -> Dict:
         """
         Perform a full analysis of a GitHub user's public profile.
@@ -282,6 +286,16 @@ class GitHubAnalyzer:
         # Step 7: Get commit activity stats (concurrent with nothing, but async)
         commit_stats = await self._get_commit_activity(username)
 
+        # Step 8: Code quality analysis (optional — analyzes actual source files)
+        code_quality = {}
+        if analyze_code:
+            try:
+                code_quality = await self.analyze_code_quality_from_repos(
+                    username, original_repos[:5]
+                )
+            except Exception as e:
+                logger.warning(f"[GitHubAnalyzer] Code quality analysis failed (non-critical): {e}")
+
         demonstrated_list = sorted(demonstrated_skills)
         logger.info(f"[GitHubAnalyzer] Demonstrated skills: {demonstrated_list}")
 
@@ -292,6 +306,7 @@ class GitHubAnalyzer:
             "raw_languages": language_bytes,
             "raw_topics": all_topics,
             "commit_activity": commit_stats,
+            "code_quality": code_quality,
             "total_repos": len(repos),
             "original_repos": len(original_repos),
             "error": "",
@@ -481,6 +496,133 @@ class GitHubAnalyzer:
                     found.add(skill)
 
         return found
+
+    # -----------------------------------------------------------------
+    #  Code Quality Analysis — Fetch and analyze actual source files
+    # -----------------------------------------------------------------
+    async def get_repo_tree(self, username: str, repo_name: str) -> List[Dict]:
+        """Fetch the recursive file tree for a repository."""
+        url = f"{self.API_BASE}/repos/{username}/{repo_name}/git/trees/HEAD"
+        try:
+            async with _github_semaphore:
+                client = await self._get_client()
+                response = await client.get(url, params={"recursive": "1"})
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("tree", [])
+                return []
+        except (httpx.TimeoutException, httpx.ConnectError):
+            return []
+
+    def _select_analysis_files(self, tree: List[Dict], max_files: int = 3) -> List[str]:
+        """Select the best source code files from a repo tree for quality analysis."""
+        candidates = []
+        for item in tree:
+            if item.get("type") != "blob":
+                continue
+            path = item.get("path", "")
+            size = item.get("size", 0)
+            if not is_code_file(path):
+                continue
+            if should_skip_path(path):
+                continue
+            if size < 200 or size > 50000:  # skip tiny or huge files
+                continue
+            # Prefer files in src/app/lib directories
+            priority = 0
+            path_lower = path.lower()
+            if any(d in path_lower for d in ["src/", "app/", "lib/", "core/", "api/"]):
+                priority += 2
+            if size > 1000:
+                priority += 1
+            if size > 3000:
+                priority += 1
+            candidates.append((path, size, priority))
+
+        # Sort by priority desc, then size desc
+        candidates.sort(key=lambda x: (-x[2], -x[1]))
+        return [c[0] for c in candidates[:max_files]]
+
+    async def analyze_code_quality_from_repos(
+        self, username: str, repos: List[Dict], max_repos: int = 5, max_files_per_repo: int = 3,
+    ) -> Dict:
+        """
+        Fetch and analyze actual source code files from top repos.
+        Returns aggregated code quality scores.
+        """
+        logger.info(f"[GitHubAnalyzer] Starting code quality analysis for {username}")
+
+        all_file_results = []
+        total_scores = {"speed": 0, "complexity": 0, "flexibility": 0,
+                        "code_quality": 0, "best_practices": 0}
+        valid_count = 0
+
+        # Fetch trees for top repos concurrently
+        selected_repos = repos[:max_repos]
+        tree_tasks = [self.get_repo_tree(username, r["name"]) for r in selected_repos]
+        trees = await asyncio.gather(*tree_tasks)
+
+        # For each repo, select files and fetch content
+        fetch_tasks = []
+        fetch_meta = []  # (repo_name, file_path)
+        for repo, tree in zip(selected_repos, trees):
+            if not tree:
+                continue
+            files = self._select_analysis_files(tree, max_files=max_files_per_repo)
+            for file_path in files:
+                fetch_tasks.append(self._get_file_content(username, repo["name"], file_path))
+                fetch_meta.append((repo["name"], file_path))
+
+        if not fetch_tasks:
+            logger.info("[GitHubAnalyzer] No analyzable source files found")
+            return {}
+
+        # Fetch all file contents concurrently (cap at 15)
+        fetch_tasks = fetch_tasks[:15]
+        fetch_meta = fetch_meta[:15]
+        file_contents = await asyncio.gather(*fetch_tasks)
+
+        # Analyze each file with LLM
+        for (repo_name, file_path), content in zip(fetch_meta, file_contents):
+            if not content or len(content.strip()) < 100:
+                continue
+            language = detect_language(file_path)
+            result = analyze_code_quality(
+                code=content,
+                language=language,
+                context="github",
+                filename=f"{repo_name}/{file_path}",
+            )
+            if result:
+                all_file_results.append({
+                    "repo": repo_name,
+                    "file": file_path,
+                    "language": language,
+                    "scores": result,
+                })
+                for dim in total_scores:
+                    total_scores[dim] += result.get(dim, {}).get("score", 0)
+                valid_count += 1
+
+        if valid_count == 0:
+            logger.info("[GitHubAnalyzer] No files could be analyzed for code quality")
+            return {}
+
+        # Compute aggregate scores
+        aggregate = {}
+        for dim in total_scores:
+            avg = round(total_scores[dim] / valid_count, 1)
+            aggregate[dim] = {"score": avg, "notes": f"Average across {valid_count} files"}
+
+        dim_scores = [aggregate[d]["score"] for d in total_scores]
+        aggregate["overall_score"] = round(sum(dim_scores) / len(dim_scores), 1)
+        aggregate["files_analyzed"] = valid_count
+        aggregate["per_file"] = all_file_results
+
+        logger.info(f"[GitHubAnalyzer] Code quality analysis complete — "
+                    f"{valid_count} files, overall: {aggregate['overall_score']}/10")
+
+        return aggregate
 
     # -----------------------------------------------------------------
     #  Commit Activity Analysis (async)

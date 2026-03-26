@@ -60,6 +60,7 @@ class SkillGapAnalyzer:
         ml_predictions: Dict[str, list],
         probabilities: List[float],
         skill_matrix: pd.DataFrame,
+        code_quality_score: float = None,
     ) -> Dict:
         """
         Perform a full skill gap analysis for a candidate against a target role.
@@ -244,15 +245,30 @@ class SkillGapAnalyzer:
             unverified_ratio = len(claims_not_proven) / max(total_present, 1)
             claim_penalty_score = max(0.0, 100.0 - (unverified_ratio * 50.0))
 
-        composite_score = min(100.0, round(
-            match_score * 0.45 +
-            nice_to_have_score * 0.15 +
-            confidence * 0.15 +
-            github_bonus * 0.10 +
-            strong_ratio * 0.10 +
-            claim_penalty_score * 0.05,
-            1
-        ))
+        # Adjust weights when code quality score is available
+        if code_quality_score is not None:
+            # Normalize code quality from 1-10 scale to 0-100
+            cq_normalized = min(100.0, max(0.0, code_quality_score * 10))
+            composite_score = min(100.0, round(
+                match_score * 0.35 +
+                nice_to_have_score * 0.12 +
+                confidence * 0.12 +
+                github_bonus * 0.08 +
+                strong_ratio * 0.08 +
+                claim_penalty_score * 0.05 +
+                cq_normalized * 0.20,
+                1
+            ))
+        else:
+            composite_score = min(100.0, round(
+                match_score * 0.45 +
+                nice_to_have_score * 0.15 +
+                confidence * 0.15 +
+                github_bonus * 0.10 +
+                strong_ratio * 0.10 +
+                claim_penalty_score * 0.05,
+                1
+            ))
 
         logger.info(f"[SkillGapAnalyzer] Match: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}% | Composite: {composite_score}%")
         logger.debug(f"[SkillGapAnalyzer] Missing required: {missing_required}")

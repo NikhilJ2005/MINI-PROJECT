@@ -700,6 +700,103 @@ def generate_jd_skills_extraction(
         return None
 
 
+def analyze_code_quality_llm(
+    code: str,
+    language: str = "",
+    context: str = "general",
+    challenge_description: str = "",
+    filename: str = "",
+) -> Optional[Dict]:
+    """
+    Analyze source code for quality metrics using LLM.
+    Returns dict with scores for speed, complexity, flexibility, code_quality, best_practices.
+    """
+    if not is_available():
+        return None
+
+    if not code or not code.strip():
+        return None
+
+    code_trimmed = code[:15000]
+
+    challenge_ctx = ""
+    if challenge_description:
+        challenge_ctx = (
+            f"\n\nThe code was written to solve this problem:\n{challenge_description[:1500]}\n"
+            "Also evaluate correctness — does the code solve the stated problem?"
+        )
+
+    system_prompt = (
+        "You are an expert code reviewer and software quality analyst. "
+        "Analyze the provided source code and evaluate it on five quality dimensions. "
+        "Be specific — reference actual code patterns, function names, and line-level observations. "
+        "Return a JSON object with EXACTLY these keys:\n"
+        "'speed': {'score': <int 1-10>, 'notes': '<specific observations about algorithm efficiency>'}, "
+        "'complexity': {'score': <int 1-10>, 'notes': '<observations about code complexity, nesting, readability>'}, "
+        "'flexibility': {'score': <int 1-10>, 'notes': '<observations about modularity, extensibility, patterns>'}, "
+        "'code_quality': {'score': <int 1-10>, 'notes': '<observations about naming, docs, error handling>'}, "
+        "'best_practices': {'score': <int 1-10>, 'notes': '<observations about SOLID, DRY, separation of concerns>'}, "
+        "'overall_score': <float, weighted average of all 5 scores>, "
+        "'time_complexity': '<estimated Big-O time complexity>', "
+        "'space_complexity': '<estimated Big-O space complexity>', "
+        "'summary': '<2-3 sentence overall assessment>', "
+        "'detected_patterns': [<design patterns or algorithms identified>], "
+        "'improvement_suggestions': [<2-4 specific actionable improvements>]"
+    )
+
+    if challenge_description:
+        system_prompt += (
+            ", 'correctness': {'score': <int 1-10>, 'notes': '<does it solve the problem correctly?>'}"
+        )
+
+    user_prompt = (
+        f"Language: {language or 'Auto-detect'}\n"
+        f"Context: {context}\n"
+        f"{'Filename: ' + filename if filename else ''}"
+        f"{challenge_ctx}\n\n"
+        f"Code:\n```\n{code_trimmed}\n```"
+    )
+
+    result = _llm_call(
+        system_prompt, user_prompt,
+        json_mode=True, max_tokens=2048,
+        temperature=0.2, model_tier="reasoning",
+    )
+    if not result:
+        return None
+
+    try:
+        data = json.loads(result)
+        required = ["speed", "complexity", "flexibility", "code_quality", "best_practices"]
+        if not all(k in data for k in required):
+            logger.warning("[GroqLLM] Code quality response missing required keys")
+            return None
+
+        for dim in required:
+            if isinstance(data[dim], dict):
+                score = data[dim].get("score", 5)
+                data[dim]["score"] = max(1, min(10, int(score)))
+            else:
+                data[dim] = {"score": 5, "notes": "Unable to assess"}
+
+        dim_scores = [data[d]["score"] for d in required]
+        data["overall_score"] = round(sum(dim_scores) / len(dim_scores), 1)
+        data.setdefault("time_complexity", "Unknown")
+        data.setdefault("space_complexity", "Unknown")
+        data.setdefault("summary", "")
+        data.setdefault("detected_patterns", [])
+        data.setdefault("improvement_suggestions", [])
+        data["source"] = context
+        data["language"] = language or "Unknown"
+
+        logger.info(f"[GroqLLM] Code quality analysis — overall: {data['overall_score']}/10")
+        return data
+
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        logger.warning(f"[GroqLLM] Failed to parse code quality response: {e}")
+        return None
+
+
 def generate_culture_fit_analysis(
     resume_text: str,
     target_role: str,

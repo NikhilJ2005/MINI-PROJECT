@@ -133,6 +133,28 @@ class Database:
             # Index on composite_score (must be after migration that adds the column)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_analyses_composite ON analyses(composite_score DESC)")
 
+            # Migration: add code_quality_json column if missing
+            try:
+                conn.execute("SELECT code_quality_json FROM analyses LIMIT 1")
+            except sqlite3.OperationalError:
+                conn.execute("ALTER TABLE analyses ADD COLUMN code_quality_json TEXT DEFAULT NULL")
+
+            # Code submissions table for code challenge feature
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS code_submissions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    candidate_id INTEGER,
+                    analysis_id INTEGER,
+                    challenge_id TEXT NOT NULL,
+                    language TEXT DEFAULT '',
+                    submitted_code TEXT NOT NULL,
+                    code_quality_json TEXT DEFAULT '{}',
+                    submitted_at REAL NOT NULL,
+                    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+                    FOREIGN KEY (analysis_id) REFERENCES analyses(id) ON DELETE CASCADE
+                )
+            """)
+
     # -----------------------------------------------------------------
     #  Candidate CRUD
     # -----------------------------------------------------------------
@@ -469,6 +491,47 @@ class Database:
                 ))
                 ids.append(cursor.lastrowid)
         return ids
+
+    # -----------------------------------------------------------------
+    #  Code Submissions
+    # -----------------------------------------------------------------
+    def insert_code_submission(self, submission_data: Dict) -> int:
+        with self._connect() as conn:
+            cursor = conn.execute("""
+                INSERT INTO code_submissions
+                    (candidate_id, analysis_id, challenge_id, language,
+                     submitted_code, code_quality_json, submitted_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                submission_data.get("candidate_id"),
+                submission_data.get("analysis_id"),
+                submission_data["challenge_id"],
+                submission_data.get("language", ""),
+                submission_data["submitted_code"],
+                json.dumps(submission_data.get("code_quality", {})),
+                time.time(),
+            ))
+            return cursor.lastrowid
+
+    def get_code_submissions_for_candidate(self, candidate_id: int) -> List[Dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM code_submissions WHERE candidate_id = ? ORDER BY submitted_at DESC",
+                (candidate_id,),
+            ).fetchall()
+            results = []
+            for row in rows:
+                d = dict(row)
+                d["code_quality_json"] = json.loads(d["code_quality_json"] or "{}")
+                results.append(d)
+            return results
+
+    def update_analysis_code_quality(self, analysis_id: int, code_quality: Dict):
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE analyses SET code_quality_json = ? WHERE id = ?",
+                (json.dumps(code_quality), analysis_id),
+            )
 
     # -----------------------------------------------------------------
     #  Stats
