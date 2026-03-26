@@ -178,7 +178,7 @@ class SkillGapAnalyzer:
 
         # Match score: what percentage of REQUIRED skills does the candidate have?
         total_required = len(required_skills)
-        present_required = total_required - len(missing_required)
+        present_required = len(claimed_skills)+len(demonstrated_skills) - len(missing_required)
 
         if total_required > 0:
             match_score = round((present_required / total_required) * 100, 1)
