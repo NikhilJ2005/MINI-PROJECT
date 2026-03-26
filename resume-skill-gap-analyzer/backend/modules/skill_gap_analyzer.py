@@ -92,6 +92,7 @@ class SkillGapAnalyzer:
             A comprehensive analysis dict (see structure below).
         """
         logger.info(f"[SkillGapAnalyzer] Analyzing gaps for role: {target_role}")
+        logger.debug(f"[SkillGapAnalyzer] Input: {len(claimed_skills)} claimed, {len(demonstrated_skills)} demonstrated")
 
         # --- Step 1: Get the role's requirements ---
         role_data = job_roles_data.get(target_role, {})
@@ -108,6 +109,9 @@ class SkillGapAnalyzer:
         # Deduplicate skill lists (normalization may create duplicates)
         required_skills = list(dict.fromkeys(required_skills))
         nice_to_have = [s for s in dict.fromkeys(nice_to_have) if s not in required_skills]
+
+        logger.debug(f"[SkillGapAnalyzer] After normalization: {len(claimed_skills)} claimed={claimed_skills[:5]}, "
+                     f"{len(required_skills)} required={required_skills[:5]}")
 
         # --- Step 2: Build the combined skill set ---
         # Union of everything the candidate has shown in any source
@@ -140,7 +144,7 @@ class SkillGapAnalyzer:
 
             # Get ML prediction and probability for this skill (if available)
             # The skill_matrix rows align with required + nice_to_have skills
-            ml_pred = ml_predictions.get("lr_predictions", [0] * len(required_skills))
+            ml_pred = ml_predictions.get("ensemble_predictions", ml_predictions.get("lr_predictions", [0] * len(required_skills)))
             ml_prob = probabilities
 
             skill_analysis = {
