@@ -193,11 +193,14 @@ class SkillGapAnalyzer:
         # --- Step 5: Calculate overall scores ---
 
         # Match score: what percentage of REQUIRED skills does the candidate have?
+        # present_required is derived directly from missing_required so that
+        # present_required + len(missing_required) == total_required always holds.
+        # This prevents over-counting (e.g. non-required skills inflating the score).
         total_required = len(required_skills)
-        present_required = len(claimed_skills)+len(demonstrated_skills) - len(missing_required)
+        present_required = max(0, total_required - len(missing_required))
 
         if total_required > 0:
-            match_score = round(min(present_required / total_required, 1.0) * 100, 1)
+            match_score = round((present_required / total_required) * 100, 1)
         else:
             match_score = 0.0
 
@@ -254,6 +257,12 @@ class SkillGapAnalyzer:
         logger.info(f"[SkillGapAnalyzer] Match: {match_score}% | Gap: {gap_score}% | Confidence: {confidence}% | Composite: {composite_score}%")
         logger.debug(f"[SkillGapAnalyzer] Missing required: {missing_required}")
 
+        # Consistency guard: match_score must be < 100 when any required skill is missing.
+        if match_score == 100.0 and missing_required:
+            logger.error(
+                f"[SCORE_GUARD] match_score=100% but {len(missing_required)} required skill(s) are missing: "
+                f"{missing_required}. This indicates a scoring bug."
+            )
         # Debug logging for 0% scores to help diagnose issues
         if match_score == 0 and total_required > 0:
             logger.warning(
