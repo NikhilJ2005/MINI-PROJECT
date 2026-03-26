@@ -277,3 +277,88 @@
   color: var(--text-gray);
   margin-top: var(--space-2);
 }
+
+/* Code Submissions Section */
+.code-submissions-section {
+  margin-top: var(--space-5);
+}
+
+.code-submissions-section h4 {
+  margin-bottom: var(--space-3);
+}
+
+.code-submission-card {
+  background: var(--surface-1);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+}
+
+.code-submission-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.code-submission-header:hover {
+  background: var(--surface-2);
+}
+
+.code-submission-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.code-submission-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.code-submission-lang {
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-gray);
+  font-weight: 600;
+}
+
+.code-submission-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.code-submission-time {
+  font-size: 0.8rem;
+  color: var(--text-gray);
+}
+
+.expand-icon {
+  font-size: 0.7rem;
+  color: var(--text-gray);
+}
+
+.code-submission-detail {
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border-light);
+}
+
+.code-submission-code {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono, "Fira Code", monospace);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  margin: 12px 0;
+  max-height: 400px;
+  overflow-y: auto;
+}

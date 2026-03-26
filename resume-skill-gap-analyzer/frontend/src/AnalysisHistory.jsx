@@ -42,6 +42,11 @@ const AnalysisHistory = memo(function AnalysisHistory({
     fetchHistory();
   }, [refreshKey]);
 
+  // Fetch history when panel is opened
+  useEffect(() => {
+    if (isOpen) fetchHistory();
+  }, [isOpen]);
+
   // Close on outside click
   useEffect(() => {
     if (!isOpen) return;

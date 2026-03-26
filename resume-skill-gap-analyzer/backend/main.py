@@ -883,6 +883,29 @@ async def get_candidate(candidate_id: int):
 
 
 # ---------------------------------------------------------------------------
+#  ENDPOINT: Candidate Code Submissions (for recruiter review)
+# ---------------------------------------------------------------------------
+@app.get("/candidates/{candidate_id}/code-submissions")
+async def get_candidate_code_submissions(candidate_id: int):
+    """Get all code challenge submissions for a candidate."""
+    candidate = state.db.get_candidate(candidate_id)
+    if not candidate:
+        raise HTTPException(404, "Candidate not found.")
+    submissions = state.db.get_code_submissions_for_candidate(candidate_id)
+    # Enrich with challenge title from challenges data
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    challenges_path = os.path.join(data_dir, "code_challenges.json")
+    challenge_map = {}
+    if os.path.exists(challenges_path):
+        with open(challenges_path, "r") as f:
+            for c in json.load(f):
+                challenge_map[c["id"]] = c.get("title", c["id"])
+    for s in submissions:
+        s["challenge_title"] = challenge_map.get(s.get("challenge_id", ""), s.get("challenge_id", "Unknown"))
+    return {"submissions": submissions}
+
+
+# ---------------------------------------------------------------------------
 #  ENDPOINT: Delete Candidate
 # ---------------------------------------------------------------------------
 @app.delete("/candidates/{candidate_id}")
@@ -1130,6 +1153,88 @@ async def get_code_challenge(target_role: str = ""):
 
     challenge = random.choice(challenges)
     return challenge
+
+
+# ---------------------------------------------------------------------------
+#  ENDPOINT: Code Challenge Run — Quick test against examples
+# ---------------------------------------------------------------------------
+class CodeRunRequest(BaseModel):
+    code: str = Field(max_length=50_000)
+    language: str = Field(default="Python", max_length=50)
+    challenge_id: str = Field(max_length=100)
+
+
+@app.post("/code-challenge/run")
+@limiter.limit("10/minute")
+async def run_code_challenge(request: Request, body: CodeRunRequest):
+    """Evaluate code against challenge example test cases using LLM."""
+    if not body.code.strip():
+        raise HTTPException(400, "Code cannot be empty.")
+
+    # Load challenge
+    data_dir = os.path.join(os.path.dirname(__file__), "data")
+    challenges_path = os.path.join(data_dir, "code_challenges.json")
+    challenge = None
+    if os.path.exists(challenges_path):
+        with open(challenges_path, "r") as f:
+            for c in json.load(f):
+                if c.get("id") == body.challenge_id:
+                    challenge = c
+                    break
+
+    if not challenge:
+        raise HTTPException(404, "Challenge not found.")
+
+    examples = challenge.get("examples", [])
+    if not examples:
+        return {"results": []}
+
+    # Build prompt for LLM to evaluate correctness
+    examples_text = ""
+    for i, ex in enumerate(examples):
+        examples_text += f"Test {i+1}: Input: {ex['input']} | Expected Output: {ex['output']}\n"
+
+    prompt = f"""You are a code judge. Given the following {body.language} code and test cases, determine if the code would produce the correct output for each test case.
+
+Code:
+```{body.language.lower()}
+{body.code[:8000]}
+```
+
+Test Cases:
+{examples_text}
+
+For each test case, respond with a JSON array where each element has:
+- "input": the test input (string)
+- "expected": the expected output (string)
+- "actual": what the code would produce (string, your best assessment)
+- "passed": boolean whether actual matches expected
+
+Return ONLY a JSON array, no other text."""
+
+    try:
+        from modules.groq_llm import _llm_call
+        raw = _llm_call("You are a code judge.", prompt, json_mode=True, model_tier="fast")
+        if raw:
+            # Parse JSON from response
+            import re
+            json_match = re.search(r'\[.*\]', raw, re.DOTALL)
+            if json_match:
+                results = json.loads(json_match.group())
+                return {"results": results}
+    except Exception as e:
+        logger.warning(f"[CodeChallenge/Run] LLM evaluation failed: {e}")
+
+    # Fallback: return examples with unknown status
+    results = []
+    for ex in examples:
+        results.append({
+            "input": ex["input"],
+            "expected": ex["output"],
+            "actual": "(evaluation unavailable)",
+            "passed": False,
+        })
+    return {"results": results}
 
 
 # ---------------------------------------------------------------------------

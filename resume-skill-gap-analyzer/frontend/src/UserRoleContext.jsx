@@ -4,17 +4,17 @@ const UserRoleContext = createContext(null);
 
 export function UserRoleProvider({ children }) {
   const [userRole, setUserRoleState] = useState(
-    () => localStorage.getItem("userRole") || null
+    () => sessionStorage.getItem("userRole") || null
   );
 
   const setUserRole = useCallback((role) => {
     setUserRoleState(role);
-    localStorage.setItem("userRole", role);
+    sessionStorage.setItem("userRole", role);
   }, []);
 
   const logout = useCallback(() => {
     setUserRoleState(null);
-    localStorage.removeItem("userRole");
+    sessionStorage.removeItem("userRole");
   }, []);
 
   return (

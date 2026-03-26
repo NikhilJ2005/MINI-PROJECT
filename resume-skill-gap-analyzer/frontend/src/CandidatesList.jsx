@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import Papa from "papaparse";
+import CodeQualityResults from "./CodeQualityResults";
 import { showToast } from "./Toast";
 import "./cssFile/CandidatesList.css";
 
@@ -15,6 +16,8 @@ function CandidatesList() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortKey, setSortKey] = useState("id");
   const [sortDir, setSortDir] = useState("asc");
+  const [codeSubmissions, setCodeSubmissions] = useState([]);
+  const [expandedSubmission, setExpandedSubmission] = useState(null);
 
   const fetchCandidates = async () => {
     try {
@@ -34,10 +37,19 @@ function CandidatesList() {
 
   const viewCandidate = async (id) => {
     setSelected(id);
+    setCodeSubmissions([]);
+    setExpandedSubmission(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/candidates/${id}`);
-      if (!res.ok) throw new Error("Failed to load candidate");
-      setDetail(await res.json());
+      const [candidateRes, submissionsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/candidates/${id}`),
+        fetch(`${API_BASE_URL}/candidates/${id}/code-submissions`),
+      ]);
+      if (!candidateRes.ok) throw new Error("Failed to load candidate");
+      setDetail(await candidateRes.json());
+      if (submissionsRes.ok) {
+        const subData = await submissionsRes.json();
+        setCodeSubmissions(subData.submissions || []);
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -181,6 +193,46 @@ function CandidatesList() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {codeSubmissions.length > 0 && (
+            <div className="code-submissions-section">
+              <h4>Code Challenge Submissions</h4>
+              {codeSubmissions.map((s) => {
+                const quality = s.code_quality_json || {};
+                const isExpanded = expandedSubmission === s.id;
+                return (
+                  <div key={s.id} className="code-submission-card">
+                    <div
+                      className="code-submission-header"
+                      onClick={() => setExpandedSubmission(isExpanded ? null : s.id)}
+                    >
+                      <div className="code-submission-info">
+                        <span className="code-submission-title">{s.challenge_title}</span>
+                        <span className="code-submission-lang">{s.language}</span>
+                      </div>
+                      <div className="code-submission-meta">
+                        <span className={`score-badge ${getScoreClass((quality.overall_score || 0) * 10)}`}>
+                          {quality.overall_score || "?"}/10
+                        </span>
+                        <span className="code-submission-time">
+                          {s.submitted_at ? new Date(s.submitted_at * 1000).toLocaleString() : ""}
+                        </span>
+                        <span className="expand-icon">{isExpanded ? "\u25B2" : "\u25BC"}</span>
+                      </div>
+                    </div>
+                    {isExpanded && (
+                      <div className="code-submission-detail">
+                        <pre className="code-submission-code">{s.submitted_code}</pre>
+                        {quality && quality.overall_score && (
+                          <CodeQualityResults scores={quality} title="Code Quality" compact />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
