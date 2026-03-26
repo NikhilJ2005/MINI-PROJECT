@@ -308,3 +308,91 @@ class TestSkillGapAnalyzer:
         assert statuses["React"] == "claimed_only"  # only resume
         assert statuses["Docker"] == "demonstrated_only"  # only github
         assert statuses["AWS"] == "missing"  # in neither
+
+    def _run_analyzer(self, claimed, demonstrated, required):
+        """Helper: run the analyzer with minimal scaffolding."""
+        from modules.skill_gap_analyzer import SkillGapAnalyzer
+
+        analyzer = SkillGapAnalyzer(skills_master=SKILLS_MASTER)
+        fe = FeatureEngineer()
+        df = fe.create_skill_matrix(
+            claimed_skills=claimed,
+            demonstrated_skills=demonstrated,
+            required_skills=required,
+            nice_to_have_skills=[],
+            repos_analyzed=5,
+            skills_master=SKILLS_MASTER,
+        )
+        n = len(df)
+        result = analyzer.analyze(
+            claimed_skills=claimed,
+            demonstrated_skills=demonstrated,
+            target_role="Test Role",
+            job_roles_data={"Test Role": {"required_skills": required, "nice_to_have": []}},
+            ml_predictions={"lr_predictions": [1] * n, "dt_predictions": [1] * n},
+            probabilities=[0.9] * n,
+            skill_matrix=df,
+        )
+        return result
+
+    def test_match_score_cannot_be_100_with_missing_required(self):
+        """If any required skill is missing, match_score must be < 100."""
+        result = self._run_analyzer(
+            claimed=["Python", "React"],
+            demonstrated=["Python", "Docker"],
+            required=["Python", "React", "Docker", "AWS"],
+        )
+        # AWS is missing → match_score must be < 100
+        assert "AWS" in result["missing_required"]
+        assert result["match_score"] < 100.0
+
+    def test_match_score_equals_100_only_when_all_required_present(self):
+        """match_score should be 100 when no required skills are missing."""
+        result = self._run_analyzer(
+            claimed=["Python", "React"],
+            demonstrated=["Python", "Docker"],
+            required=["Python", "React", "Docker"],
+        )
+        assert result["missing_required"] == []
+        assert result["match_score"] == 100.0
+
+    def test_match_score_consistency(self):
+        """present_required + len(missing_required) must equal total_required."""
+        result = self._run_analyzer(
+            claimed=["Python"],
+            demonstrated=["Docker"],
+            required=["Python", "Docker", "AWS", "TypeScript"],
+        )
+        total_required = 4
+        missing_count = len(result["missing_required"])
+        present_required = total_required - missing_count
+        expected_score = round((present_required / total_required) * 100, 1)
+        assert result["match_score"] == expected_score
+
+    def test_match_score_zero_when_all_required_missing(self):
+        """match_score should be 0 when none of the required skills are present."""
+        result = self._run_analyzer(
+            claimed=["Go", "Java"],  # many skills, but none required
+            demonstrated=["Go"],
+            required=["Python", "Docker"],
+        )
+        assert result["match_score"] == 0.0
+        assert len(result["missing_required"]) == 2
+
+    def test_match_score_no_negative(self):
+        """match_score must never be negative."""
+        result = self._run_analyzer(
+            claimed=[],
+            demonstrated=[],
+            required=["Python", "Docker"],
+        )
+        assert result["match_score"] >= 0.0
+
+    def test_match_score_no_required_skills(self):
+        """When the role has no required skills, match_score should be 0."""
+        result = self._run_analyzer(
+            claimed=["Python"],
+            demonstrated=[],
+            required=[],
+        )
+        assert result["match_score"] == 0.0
