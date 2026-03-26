@@ -188,16 +188,25 @@ class SkillGapAnalyzer:
         # Gap score: inverse of match score
         gap_score = round(100 - match_score, 1)
 
-        # Confidence score: average ML probability across ALL required skills
-        # This gives an unbiased view of how confident the ML model is overall
-        all_probs = [
-            max(0.0, min(float(probabilities[i]), 1.0))
-            for i in range(min(len(required_skills), len(probabilities)))
-            if not (isinstance(probabilities[i], float) and (probabilities[i] != probabilities[i]))  # skip NaN
-        ]
+        # Confidence score: evidence-weighted proficiency measure
+        # Unlike match_score (binary present/absent), confidence considers
+        # HOW WELL each skill is evidenced across multiple sources.
+        confidence_weights = []
+        for skill_info in required_analysis:
+            weight = 0.0
+            if skill_info.get("in_resume"):
+                weight += 0.4  # Resume claim
+            if skill_info.get("in_github"):
+                weight += 0.4  # GitHub evidence
+            # ML prediction adds a small boost
+            if skill_info.get("ml_prediction", 0) == 1:
+                weight += 0.2
+            # Cap at 1.0
+            skill_info["evidence_strength"] = round(min(weight, 1.0) * 100, 1)
+            confidence_weights.append(min(weight, 1.0))
 
-        if all_probs:
-            confidence = round(sum(all_probs) / len(all_probs) * 100, 1)
+        if confidence_weights:
+            confidence = round(sum(confidence_weights) / len(confidence_weights) * 100, 1)
         else:
             confidence = 0.0
 

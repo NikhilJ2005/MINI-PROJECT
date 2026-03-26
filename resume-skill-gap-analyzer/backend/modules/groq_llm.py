@@ -37,11 +37,18 @@ from loguru import logger
 _client = None
 _available = False
 
-# Model fallback chain -- try primary first, then fallbacks
-MODELS = [
+# Model fallback chains -- two tiers for different task complexity
+# Fast: quick extraction/coaching tasks
+MODELS_FAST = [
     "meta-llama/llama-4-scout-17b-16e-instruct",
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
+]
+# Reasoning: deep analysis requiring complex judgment
+MODELS_REASONING = [
+    "openai/gpt-oss-120b",
+    "qwen/qwen3-32b",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
 ]
 
 # Simple LRU cache (max 100 entries)
@@ -126,13 +133,15 @@ def _llm_call(
     max_tokens: int = 2048,
     temperature: float = 0.3,
     use_cache: bool = True,
+    model_tier: str = "fast",
 ) -> Optional[str]:
     """
     Make an LLM call with retry logic, model fallback, and caching.
 
     Retries: 3 attempts with 1s, 2s, 4s backoff on transient errors.
-    Fallback: Tries each model in MODELS list before giving up.
+    Fallback: Tries each model in the selected tier's chain before giving up.
     Cache: In-memory LRU cache with 1-hour TTL using SHA256 keys.
+    model_tier: "fast" for extraction/coaching, "reasoning" for deep analysis.
     """
     client = _get_client()
     if not client:
@@ -146,8 +155,11 @@ def _llm_call(
             logger.debug("[GroqLLM] Cache hit")
             return cached
 
+    # Select model chain based on tier
+    models = MODELS_REASONING if model_tier == "reasoning" else MODELS_FAST
+
     # Try each model in fallback chain
-    for model_idx, model in enumerate(MODELS):
+    for model_idx, model in enumerate(models):
         # Retry loop with exponential backoff
         for attempt in range(3):
             try:
@@ -185,7 +197,7 @@ def _llm_call(
                     logger.warning(f"[GroqLLM] Transient error (attempt {attempt+1}/3), retrying in {wait}s: {e}")
                     time.sleep(wait)
                     continue
-                elif model_idx < len(MODELS) - 1:
+                elif model_idx < len(models) - 1:
                     logger.warning(f"[GroqLLM] Model {model} failed, trying fallback: {e}")
                     break  # Try next model
                 else:
@@ -244,6 +256,9 @@ def generate_ai_feedback(
     missing_skills: List[str],
     strengths: List[str],
     match_score: float,
+    composite_score: float = None,
+    claims_not_proven: List[str] = None,
+    required_skills: List[str] = None,
 ) -> Optional[Dict]:
     """
     Generate personalized AI resume coaching feedback.
@@ -255,6 +270,8 @@ def generate_ai_feedback(
     system_prompt = (
         "You are an expert career coach and resume reviewer. Provide actionable, specific advice "
         "to help the candidate improve their resume for the target role. Be encouraging but honest. "
+        "Tailor advice to the candidate's match level — if 75%+ focus on polish and positioning, "
+        "if <30% suggest fundamental changes. Reference specific sections and projects from the resume. "
         "Return a JSON object with keys: "
         "'resume_tips' (array of 3-5 specific improvement tips), "
         "'bullet_suggestions' (array of 2-3 bullet points the candidate could add to strengthen gaps), "
@@ -262,15 +279,23 @@ def generate_ai_feedback(
         "'keyword_suggestions' (array of 5-8 keywords to add for ATS optimization), "
         "'formatting_tips' (array of 2-3 resume formatting improvements)."
     )
+    extra_context = ""
+    if composite_score is not None:
+        extra_context += f"Composite Score: {composite_score}%\n"
+    if claims_not_proven:
+        extra_context += f"Unverified Claims (resume only): {', '.join(claims_not_proven[:10])}\n"
+    if required_skills:
+        extra_context += f"Role Required Skills: {', '.join(required_skills[:15])}\n"
     user_prompt = (
         f"Target Role: {target_role}\n"
         f"Match Score: {match_score}%\n"
+        f"{extra_context}"
         f"Strengths: {', '.join(strengths[:10])}\n"
         f"Missing Skills: {', '.join(missing_skills[:10])}\n"
-        f"Resume excerpt:\n{resume_text[:3000]}"
+        f"Resume excerpt:\n{resume_text[:5000]}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, temperature=0.4)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, temperature=0.4, model_tier="fast")
     if not result:
         return None
 
@@ -295,6 +320,9 @@ def generate_interview_questions(
     claimed_skills: List[str],
     missing_skills: List[str],
     claims_not_proven: List[str],
+    resume_text: str = "",
+    github_insights: Dict = None,
+    required_skills: List[str] = None,
 ) -> Optional[List[Dict]]:
     """
     Generate likely interview questions based on the candidate's profile.
@@ -305,8 +333,10 @@ def generate_interview_questions(
 
     system_prompt = (
         "You are a senior technical interviewer. Generate interview questions tailored to "
-        "this candidate's skill profile. Focus on skills they claim but haven't demonstrated "
-        "(to verify claims) and skills critical to the role. "
+        "this candidate's specific profile. Reference specific projects and experience from "
+        "the resume. Make questions scenario-based, not generic knowledge checks. "
+        "Focus on skills they claim but haven't demonstrated (to verify claims) and "
+        "skills critical to the role. "
         "Return a JSON object with key 'questions' containing an array of objects, each with: "
         "'question' (the interview question), "
         "'skill' (the skill being tested), "
@@ -314,15 +344,27 @@ def generate_interview_questions(
         "'prep_hint' (brief hint on how to prepare for this question), "
         "'why_asked' (brief explanation of why this question is important for the role)."
     )
+    github_context = ""
+    if github_insights:
+        repos = github_insights.get("repos_analyzed", 0)
+        langs = [l.get("language", "") for l in github_insights.get("top_languages", [])]
+        github_context = f"\nGitHub Profile: {repos} repos, top languages: {', '.join(langs)}"
+    skills_context = ""
+    if required_skills:
+        skills_context = f"\nRole Required Skills: {', '.join(required_skills[:15])}"
+    resume_context = ""
+    if resume_text:
+        resume_context = f"\nResume excerpt:\n{resume_text[:4000]}"
     user_prompt = (
         f"Target Role: {target_role}\n"
         f"Claimed skills: {', '.join(claimed_skills[:15])}\n"
         f"Unproven claims (on resume but not GitHub): {', '.join(claims_not_proven[:10])}\n"
-        f"Missing critical skills: {', '.join(missing_skills[:10])}\n"
+        f"Missing critical skills: {', '.join(missing_skills[:10])}"
+        f"{skills_context}{github_context}{resume_context}\n"
         f"Generate 5-7 targeted interview questions."
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, temperature=0.5)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, temperature=0.5, model_tier="reasoning")
     if not result:
         return None
 
@@ -349,6 +391,8 @@ def generate_learning_path(
     target_role: str,
     missing_skills: List[str],
     current_skills: List[str],
+    resume_text: str = "",
+    match_score: float = None,
 ) -> Optional[List[Dict]]:
     """
     Generate a personalized learning path with specific resources.
@@ -360,6 +404,7 @@ def generate_learning_path(
     system_prompt = (
         "You are a technical learning advisor. Create a personalized, prioritized learning plan. "
         "Consider skill dependencies (e.g., learn Docker before Kubernetes). "
+        "Adapt difficulty to the candidate's experience level visible in the resume. "
         "Return a JSON object with key 'learning_path' containing an array of objects, each with: "
         "'skill' (skill to learn), "
         "'week' (suggested week number, 1-8), "
@@ -369,14 +414,22 @@ def generate_learning_path(
         "'prerequisites' (array of skills that should be learned first, can be empty), "
         "'estimated_hours' (estimated hours to reach basic competency, as integer)."
     )
+    extra_context = ""
+    if match_score is not None:
+        extra_context += f"Match Score: {match_score}%\n"
+    resume_context = ""
+    if resume_text:
+        resume_context = f"\nResume excerpt:\n{resume_text[:2500]}"
     user_prompt = (
         f"Target Role: {target_role}\n"
+        f"{extra_context}"
         f"Skills to learn: {', '.join(missing_skills[:12])}\n"
         f"Current skills: {', '.join(current_skills[:15])}\n"
         f"Create a structured learning plan for the missing skills."
+        f"{resume_context}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=3000, temperature=0.3)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=3000, temperature=0.3, model_tier="fast")
     if not result:
         return None
 
@@ -436,10 +489,10 @@ def generate_skill_credibility_assessment(
         f"Skills confirmed on GitHub: {', '.join(demonstrated_skills[:15])}\n"
         f"Skills ONLY on resume (unverified): {', '.join(claims_not_proven[:12])}\n"
         f"All claimed skills: {', '.join(claimed_skills[:20])}\n"
-        f"Resume text:\n{resume_text[:3500]}"
+        f"Resume text:\n{resume_text[:5000]}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000, temperature=0.2)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000, temperature=0.2, model_tier="reasoning")
     if not result:
         return None
 
@@ -474,6 +527,9 @@ def generate_role_fit_narrative(
     claims_not_proven: List[str],
     hidden_strengths: List[str],
     github_insights: Dict = None,
+    resume_text: str = "",
+    required_skills: List[str] = None,
+    composite_score: float = None,
 ) -> Optional[Dict]:
     """
     Generate a detailed role-fit narrative that explains WHY the candidate
@@ -494,6 +550,7 @@ def generate_role_fit_narrative(
         "You are a talent analytics specialist. Write a comprehensive role-fit analysis "
         "that explains the candidate's fit for the role in detail. Go beyond listing skills -- "
         "analyze patterns, identify strengths, and explain gaps in context. "
+        "Reference specific projects and accomplishments from the resume. Don't be generic. "
         "Return a JSON object with EXACTLY these keys: "
         "'fit_score' (integer 1-10 rating of overall role fit, where 10 is perfect fit), "
         "'narrative' (2-3 sentence explanation of what the match score means in practice "
@@ -505,17 +562,26 @@ def generate_role_fit_narrative(
         "'onboarding_estimate' (string estimating ramp-up time — e.g. '2-4 weeks for core tasks, "
         "2-3 months for full productivity')."
     )
+    extra_context = ""
+    if composite_score is not None:
+        extra_context += f"Composite Score: {composite_score}%\n"
+    if required_skills:
+        extra_context += f"Role Required Skills: {', '.join(required_skills[:15])}\n"
+    resume_context = ""
+    if resume_text:
+        resume_context = f"\nResume excerpt:\n{resume_text[:4000]}"
     user_prompt = (
         f"Target Role: {target_role}\n"
         f"Match Score: {match_score}%\n"
+        f"{extra_context}"
         f"Verified Strengths (resume + GitHub): {', '.join(strengths[:10])}\n"
         f"Unverified Claims (resume only): {', '.join(claims_not_proven[:8])}\n"
         f"Hidden Strengths (GitHub only): {', '.join(hidden_strengths[:5])}\n"
         f"Missing Critical Skills: {', '.join(missing_skills[:8])}"
-        f"{github_context}"
+        f"{github_context}{resume_context}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000, temperature=0.3)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=2000, temperature=0.3, model_tier="reasoning")
     if not result:
         return None
 
@@ -550,6 +616,9 @@ def generate_candidate_summary(
     strengths: List[str],
     missing_skills: List[str],
     github_insights: Dict = None,
+    composite_score: float = None,
+    hidden_strengths: List[str] = None,
+    claims_not_proven: List[str] = None,
 ) -> Optional[Dict]:
     """
     Generate a recruiter-facing executive summary for a single candidate.
@@ -568,6 +637,7 @@ def generate_candidate_summary(
         "You are a senior technical recruiter writing a candidate assessment. "
         "Write a concise, professional summary that another recruiter or hiring manager "
         "can quickly scan to decide whether to move forward with the candidate. "
+        "Reference specific projects and accomplishments that make THIS candidate unique. "
         "Return a JSON object with keys: "
         "'headline' (one-line candidate headline, e.g. 'Strong Python backend dev with ML experience'), "
         "'executive_summary' (3-4 sentence paragraph assessing overall fit), "
@@ -576,16 +646,24 @@ def generate_candidate_summary(
         "'hiring_recommendation' ('Strong Hire' / 'Hire' / 'Maybe' / 'Pass'), "
         "'salary_positioning' (brief note on where they'd likely land: junior/mid/senior based on skills)."
     )
+    extra_context = ""
+    if composite_score is not None:
+        extra_context += f"Composite Score: {composite_score}%\n"
+    if hidden_strengths:
+        extra_context += f"Hidden Strengths (GitHub only): {', '.join(hidden_strengths[:5])}\n"
+    if claims_not_proven:
+        extra_context += f"Unverified Claims: {', '.join(claims_not_proven[:8])}\n"
     user_prompt = (
         f"Candidate: {candidate_name}\n"
         f"Target Role: {target_role}\n"
         f"Match Score: {match_score}%\n"
+        f"{extra_context}"
         f"Key Strengths: {', '.join(strengths[:10])}\n"
         f"Missing Skills: {', '.join(missing_skills[:8])}{github_context}\n"
-        f"Resume excerpt:\n{resume_text[:2500]}"
+        f"Resume excerpt:\n{resume_text[:4500]}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500, temperature=0.2)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500, temperature=0.2, model_tier="reasoning")
     if not result:
         return None
 
@@ -714,6 +792,7 @@ def generate_culture_fit_analysis(
     system_prompt = (
         "You are a talent assessment specialist. Analyze the resume for soft skills, "
         "leadership indicators, communication style, and cultural signals. "
+        "Cite specific phrases and patterns from the resume as evidence. No generic claims. "
         "Return a JSON object with keys: "
         "'soft_skills' (array of detected soft skills like 'Leadership', 'Collaboration', etc.), "
         "'communication_score' (1-10 rating of how well the resume communicates), "
@@ -724,10 +803,10 @@ def generate_culture_fit_analysis(
     )
     user_prompt = (
         f"Target Role: {target_role}\n"
-        f"Resume:\n{resume_text[:3500]}"
+        f"Resume:\n{resume_text[:5000]}"
     )
 
-    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500, temperature=0.3)
+    result = _llm_call(system_prompt, user_prompt, json_mode=True, max_tokens=1500, temperature=0.3, model_tier="reasoning")
     if not result:
         return None
 
