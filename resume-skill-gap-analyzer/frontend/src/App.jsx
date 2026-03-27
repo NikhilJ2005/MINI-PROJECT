@@ -26,9 +26,15 @@ const TabFallback = () => (
 function App() {
   const { userRole } = useUserRole();
 
-  const [activeTab, setActiveTab] = useState(
-    () => localStorage.getItem("activeTab") || "analyze"
-  );
+  const [activeTab, setActiveTab] = useState(() => {
+    // Read userRole directly from localStorage so the initializer
+    // can pick up the correct per-role stored tab on first render.
+    const role = localStorage.getItem("userRole");
+    if (role) {
+      return localStorage.getItem(`activeTab_${role}`) || "analyze";
+    }
+    return "analyze";
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState(null);
@@ -53,10 +59,22 @@ function App() {
     setDarkMode((d) => !d);
   }, []);
 
-  // Persist activeTab to localStorage
+  // Persist activeTab per-role (candidate / recruiter get separate keys)
   useEffect(() => {
-    localStorage.setItem("activeTab", activeTab);
-  }, [activeTab]);
+    if (!userRole) return;
+    localStorage.setItem(`activeTab_${userRole}`, activeTab);
+  }, [activeTab, userRole]);
+
+  // Reset view state and restore per-role tab when switching roles
+  useEffect(() => {
+    if (!userRole) return;
+    const stored = localStorage.getItem(`activeTab_${userRole}`);
+    setActiveTab(stored || "analyze");
+    setReport(null);
+    setCurrentAnalysisId(null);
+    setError("");
+    setLoading(false);
+  }, [userRole]);
 
   // Reset view state when role actually switches (candidate ↔ recruiter)
   useEffect(() => {

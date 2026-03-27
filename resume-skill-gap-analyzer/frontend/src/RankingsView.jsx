@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useUserRole } from "./UserRoleContext";
+import NotAuthorized from "./NotAuthorized";
 import Role from "./Role";
 import RankingTable from "./RankingTable";
 import Papa from "papaparse";
@@ -8,6 +10,7 @@ import "./cssFile/RankingsView.css";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 function RankingsView() {
+  const { userRole } = useUserRole();
   const [targetRole, setTargetRole] = useState("");
   const [rankings, setRankings] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -55,6 +58,10 @@ function RankingsView() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     showToast("Rankings CSV exported!", "success");
   };
+
+  if (userRole !== "recruiter") {
+    return <NotAuthorized message="Recruiter access required" />;
+  }
 
   return (
     <div className="rankings-view">

@@ -1,4 +1,6 @@
 import { useState, useRef, useCallback } from "react";
+import { useUserRole } from "./UserRoleContext";
+import NotAuthorized from "./NotAuthorized";
 import Role from "./Role";
 import RankingTable from "./RankingTable";
 import CodeQualityResults from "./CodeQualityResults";
@@ -15,6 +17,7 @@ function formatFileSize(bytes) {
 }
 
 function BatchUpload() {
+  const { userRole } = useUserRole();
   const [files, setFiles] = useState([]);
   const [targetRole, setTargetRole] = useState("");
   const [loading, setLoading] = useState(false);
@@ -188,6 +191,10 @@ function BatchUpload() {
   };
 
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+
+  if (userRole !== "recruiter") {
+    return <NotAuthorized message="Recruiter access required" />;
+  }
 
   return (
     <div className="batch-upload">
@@ -370,6 +377,19 @@ function BatchUpload() {
               setTimeout(() => URL.revokeObjectURL(url), 1000);
               showToast("Batch CSV exported!", "success");
             }}>Export CSV</button>
+            <button
+              type="button"
+              className="clear-results-btn"
+              onClick={() => {
+                setResult(null);
+                setError("");
+                setFiles([]);
+                setCodeFiles([]);
+                showToast("Batch results cleared.", "info");
+              }}
+            >
+              Clear Results
+            </button>
           </div>
           {/* AI Executive Report for Recruiters */}
           {result.ai_executive_report && (

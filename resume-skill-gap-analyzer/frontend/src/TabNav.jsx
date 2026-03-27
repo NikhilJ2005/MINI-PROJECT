@@ -17,7 +17,7 @@ export function getVisibleTabs(role) {
 }
 
 function TabNav({ activeTab, onTabChange, darkMode, toggleDarkMode }) {
-  const { userRole, logout } = useUserRole();
+  const { userRole, switchRole } = useUserRole();
   const visibleTabs = getVisibleTabs(userRole);
 
   return (
@@ -33,7 +33,7 @@ function TabNav({ activeTab, onTabChange, darkMode, toggleDarkMode }) {
             <span className={`role-badge role-badge-${userRole}`}>
               {userRole === "candidate" ? "Candidate" : "Recruiter"}
             </span>
-            <button className="switch-role-btn" onClick={logout} title="Switch Role">
+            <button className="switch-role-btn" onClick={switchRole} title="Switch Role">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
