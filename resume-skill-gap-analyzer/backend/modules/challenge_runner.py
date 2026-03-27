@@ -1,0 +1,796 @@
+"""
+challenge_runner.py — Multi-language function-only code challenge runner.
+
+Loads a problem spec by id, generates a per-language harness/wrapper,
+executes in a temp dir with strict timeouts, compares outputs, and
+returns a unified result schema.
+"""
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+PROBLEMS_DIR = Path(__file__).resolve().parent.parent / "problems"
+TIMEOUT_SECONDS = 10  # per-run wall-clock limit
+
+
+# ---------------------------------------------------------------------------
+# Result schema helpers
+# ---------------------------------------------------------------------------
+
+def _ok_result(passed: int, total: int, runtime_ms: float,
+                failed_cases: List[Dict], stdout: str, stderr: str) -> Dict:
+    verdict = "Accepted" if passed == total else "Wrong Answer"
+    return {
+        "ok": passed == total,
+        "verdict": verdict,
+        "passed": passed,
+        "total": total,
+        "runtime_ms": round(runtime_ms, 2),
+        "failed_cases": failed_cases,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+
+
+def _error_result(verdict: str, stderr: str, stdout: str = "",
+                  total: int = 0) -> Dict:
+    return {
+        "ok": False,
+        "verdict": verdict,
+        "passed": 0,
+        "total": total,
+        "runtime_ms": 0.0,
+        "failed_cases": [],
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Problem loading
+# ---------------------------------------------------------------------------
+
+def load_problem(problem_id: str) -> Dict:
+    """Load a problem JSON from the problems directory."""
+    path = PROBLEMS_DIR / f"{problem_id}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Problem '{problem_id}' not found.")
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def list_problems() -> List[Dict]:
+    """Return a list of all problems (id, title, difficulty) without exposing tests."""
+    problems = []
+    for p in sorted(PROBLEMS_DIR.glob("*.json")):
+        with open(p, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        problems.append({
+            "id": data["id"],
+            "title": data["title"],
+            "difficulty": data["difficulty"],
+        })
+    return problems
+
+
+def problem_detail(problem_id: str) -> Dict:
+    """Return problem detail without exposing hidden tests."""
+    data = load_problem(problem_id)
+    return {
+        "id": data["id"],
+        "title": data["title"],
+        "difficulty": data["difficulty"],
+        "prompt": data["prompt"],
+        "constraints": data.get("constraints", []),
+        "function_name": data["function_name"],
+        "params": data["params"],
+        "returns": data["returns"],
+        "examples": data.get("examples", []),
+        "starter_templates": data.get("starter_templates", {}),
+        # Only expose sample tests (not hidden)
+        "sample_tests": data.get("tests", {}).get("sample", []),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Value serialisation helpers (used in harnesses)
+# ---------------------------------------------------------------------------
+
+def _py_literal(value: Any) -> str:
+    """Convert a Python value to a Python literal string."""
+    return repr(value)
+
+
+def _js_literal(value: Any) -> str:
+    """Convert a Python value to a JSON/JS literal."""
+    return json.dumps(value)
+
+
+def _escape_c_string(s: str) -> str:
+    """Escape a Python string for embedding in a C/C++ string literal."""
+    s = s.replace("\\", "\\\\")
+    s = s.replace('"', '\\"')
+    s = s.replace("\n", "\\n")
+    s = s.replace("\r", "\\r")
+    s = s.replace("\t", "\\t")
+    return s
+
+
+def _c_literal(value: Any) -> str:
+    """Convert a value to a C/C++ literal (supports bool, string, int, float)."""
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, str):
+        return f'"{_escape_c_string(value)}"'
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    raise ValueError(f"Unsupported C literal type: {type(value)}")
+
+
+def _java_literal(value: Any) -> str:
+    """Convert a value to a Java literal."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        s = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+        return f'"{s}"'
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return repr(value) + "f"
+    raise ValueError(f"Unsupported Java literal type: {type(value)}")
+
+
+def _returns_to_c_type(returns: str) -> str:
+    mapping = {"bool": "int", "int": "int", "float": "double",
+               "double": "double", "string": "const char*", "str": "const char*"}
+    return mapping.get(returns, "int")
+
+
+def _returns_to_cpp_type(returns: str) -> str:
+    mapping = {"bool": "bool", "int": "int", "float": "double",
+               "double": "double", "string": "std::string", "str": "std::string"}
+    return mapping.get(returns, "bool")
+
+
+def _returns_to_java_type(returns: str) -> str:
+    mapping = {"bool": "boolean", "int": "int", "float": "float",
+               "double": "double", "string": "String", "str": "String"}
+    return mapping.get(returns, "boolean")
+
+
+def _c_format_spec(returns: str) -> str:
+    mapping = {"bool": "%d", "int": "%d", "float": "%f",
+               "double": "%lf", "string": "%s", "str": "%s"}
+    return mapping.get(returns, "%d")
+
+
+# ---------------------------------------------------------------------------
+# Harness builders — one per language
+# ---------------------------------------------------------------------------
+
+def _build_python_harness(problem: Dict, user_code: str, tests: List[Dict]) -> str:
+    fn = problem["function_name"]
+    lines = [user_code, "", "import sys as _sys", ""]
+    lines.append("_tests = [")
+    for t in tests:
+        inp = t["input"]
+        exp = t["expected"]
+        lines.append(f"    ({_py_literal(inp)}, {_py_literal(exp)}),")
+    lines.append("]")
+    lines.append("")
+    lines.append("_passed = 0")
+    lines.append("_failed = []")
+    lines.append("for _i, (_inp, _exp) in enumerate(_tests):")
+    lines.append(f"    try:")
+    lines.append(f"        _actual = {fn}(*_inp)")
+    lines.append(f"    except Exception as _e:")
+    lines.append(f"        _failed.append((_i, _inp, _exp, None, str(_e)))")
+    lines.append(f"        continue")
+    lines.append(f"    if _actual == _exp:")
+    lines.append(f"        _passed += 1")
+    lines.append(f"    else:")
+    lines.append(f"        _failed.append((_i, _inp, _exp, _actual, ''))")
+    lines.append("")
+    lines.append("import json as _json")
+    lines.append("print(_json.dumps({'passed': _passed, 'total': len(_tests), 'failed': _failed}))")
+    return "\n".join(lines)
+
+
+def _build_js_harness(problem: Dict, user_code: str, tests: List[Dict]) -> str:
+    fn = problem["function_name"]
+    test_json = json.dumps(tests)
+    harness = f"""{user_code}
+
+const _tests = {test_json};
+let _passed = 0;
+const _failed = [];
+
+for (let _i = 0; _i < _tests.length; _i++) {{
+  const _t = _tests[_i];
+  let _actual;
+  try {{
+    _actual = {fn}(..._t.input);
+  }} catch(e) {{
+    _failed.push([_i, _t.input, _t.expected, null, e.message]);
+    continue;
+  }}
+  if (_actual === _t.expected) {{
+    _passed++;
+  }} else {{
+    _failed.push([_i, _t.input, _t.expected, _actual, '']);
+  }}
+}}
+
+console.log(JSON.stringify({{passed: _passed, total: _tests.length, failed: _failed}}));
+"""
+    return harness
+
+
+def _build_java_files(problem: Dict, user_code: str, tests: List[Dict]) -> str:
+    """Return Java source that embeds tests and calls the user's class method."""
+    fn = problem["function_name"]
+    returns = problem.get("returns", "bool")
+    java_ret = _returns_to_java_type(returns)
+
+    # Build test arrays
+    param_types = [p["type"] for p in problem["params"]]
+
+    # For MVP (single string param, bool return — Valid Parentheses)
+    # We build the harness generically for bool returns with String params
+    param_java_type = "String"  # MVP: string only
+    if param_types and param_types[0] in ("int", "integer"):
+        param_java_type = "int"
+
+    # Build input/expected arrays
+    input_literals = []
+    expected_literals = []
+    for t in tests:
+        inp_parts = ", ".join(_java_literal(v) for v in t["input"])
+        input_literals.append(f"        new {param_java_type}[]{{{inp_parts}}}" if len(t["input"]) > 1
+                              else _java_literal(t["input"][0]))
+        expected_literals.append(_java_literal(t["expected"]))
+
+    inputs_arr = ",\n            ".join(input_literals)
+    expected_arr = ",\n            ".join(expected_literals)
+    n = len(tests)
+
+    # Extract just the method from user code if it contains a class wrapper
+    # We embed the user's Solution class and call it
+    source = f"""import org.json.JSONArray;
+import org.json.JSONObject;
+
+{user_code}
+
+public class Main {{
+    public static void main(String[] args) throws Exception {{
+        Solution _sol = new Solution();
+
+        {param_java_type}[] _inputs = {{
+            {inputs_arr}
+        }};
+        {java_ret}[] _expected = {{
+            {expected_arr}
+        }};
+
+        int _passed = 0;
+        JSONArray _failed = new JSONArray();
+
+        for (int _i = 0; _i < {n}; _i++) {{
+            {java_ret} _actual;
+            try {{
+                _actual = _sol.{fn}(_inputs[_i]);
+            }} catch (Exception _e) {{
+                JSONObject _fc = new JSONObject();
+                _fc.put("index", _i);
+                _fc.put("error", _e.getMessage());
+                _failed.put(_fc);
+                continue;
+            }}
+            if (_actual == _expected[_i]) {{
+                _passed++;
+            }} else {{
+                JSONObject _fc = new JSONObject();
+                _fc.put("index", _i);
+                _fc.put("expected", _expected[_i]);
+                _fc.put("actual", _actual);
+                _failed.put(_fc);
+            }}
+        }}
+
+        JSONObject _result = new JSONObject();
+        _result.put("passed", _passed);
+        _result.put("total", {n});
+        _result.put("failed", _failed);
+        System.out.println(_result.toString());
+    }}
+}}
+"""
+    return source
+
+
+def _build_c_harness(problem: Dict, user_code: str, tests: List[Dict]) -> str:
+    """Generate a self-contained C program with test cases embedded as literals."""
+    fn = problem["function_name"]
+    returns = problem.get("returns", "bool")
+    c_type = _returns_to_c_type(returns)
+    fmt = _c_format_spec(returns)
+
+    # Build case arrays
+    case_lines = []
+    for i, t in enumerate(tests):
+        # MVP: single string param
+        inp_val = _c_literal(t["input"][0]) if t["input"] else '""'
+        exp_val = _c_literal(t["expected"])
+        case_lines.append(f'    {{ {inp_val}, {exp_val} }}')
+
+    cases_str = ",\n".join(case_lines)
+    n = len(tests)
+
+    source = f"""#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+/* ---- User code ---- */
+{user_code}
+/* ---- End user code ---- */
+
+typedef struct {{
+    const char* input;
+    int expected;
+}} TestCase;
+
+int main(void) {{
+    TestCase cases[] = {{
+{cases_str}
+    }};
+    int total = {n};
+    int passed = 0;
+    int failed_indices[{max(n, 1)}];
+    int failed_count = 0;
+
+    for (int i = 0; i < total; i++) {{
+        {c_type} actual = {fn}(cases[i].input);
+        int actual_int = (int)actual;
+        if (actual_int == cases[i].expected) {{
+            passed++;
+        }} else {{
+            failed_indices[failed_count++] = i;
+        }}
+    }}
+
+    printf("{{\\\"passed\\\":%d,\\\"total\\\":%d,\\\"failed_count\\\":%d}}\\n",
+           passed, total, failed_count);
+    return 0;
+}}
+"""
+    return source
+
+
+def _build_cpp_harness(problem: Dict, user_code: str, tests: List[Dict]) -> str:
+    """Generate a self-contained C++ program with test cases embedded as literals."""
+    fn = problem["function_name"]
+    returns = problem.get("returns", "bool")
+
+    # Build input/expected vectors
+    input_literals = [_c_literal(t["input"][0]) if t["input"] else '""' for t in tests]
+    expected_literals = [("true" if t["expected"] else "false") if isinstance(t["expected"], bool)
+                        else str(t["expected"]) for t in tests]
+    n = len(tests)
+    inputs_str = ", ".join(input_literals)
+    expected_str = ", ".join(expected_literals)
+
+    source = f"""#include <iostream>
+#include <string>
+#include <vector>
+using namespace std;
+
+/* ---- User code ---- */
+{user_code}
+/* ---- End user code ---- */
+
+int main() {{
+    vector<string> inputs = {{ {inputs_str} }};
+    vector<bool> expected = {{ {expected_str} }};
+    int total = {n};
+    int passed = 0;
+    int failed_count = 0;
+
+    for (int i = 0; i < total; i++) {{
+        bool actual;
+        try {{
+            actual = {fn}(inputs[i]);
+        }} catch (...) {{
+            failed_count++;
+            continue;
+        }}
+        if (actual == expected[i]) {{
+            passed++;
+        }} else {{
+            failed_count++;
+        }}
+    }}
+
+    cout << "{{\\\"passed\\\":" << passed << ",\\\"total\\\":" << total
+         << ",\\\"failed_count\\\":" << failed_count << "}}" << endl;
+    return 0;
+}}
+"""
+    return source
+
+
+# ---------------------------------------------------------------------------
+# Execution helpers
+# ---------------------------------------------------------------------------
+
+def _run_subprocess(cmd: List[str], cwd: str, stdin: Optional[str] = None) -> Dict:
+    """Run a subprocess with timeout, return stdout/stderr/returncode/runtime_ms."""
+    start = time.monotonic()
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=cwd,
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+        )
+        elapsed = (time.monotonic() - start) * 1000
+        return {
+            "returncode": proc.returncode,
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "runtime_ms": elapsed,
+            "timed_out": False,
+        }
+    except subprocess.TimeoutExpired:
+        elapsed = TIMEOUT_SECONDS * 1000
+        return {
+            "returncode": -1,
+            "stdout": "",
+            "stderr": "Time limit exceeded.",
+            "runtime_ms": elapsed,
+            "timed_out": True,
+        }
+
+
+def _parse_runner_output(raw: str, tests: List[Dict]) -> Dict[str, Any]:
+    """Parse JSON output from Python/JS runners."""
+    raw = raw.strip()
+    # Find the last JSON object in stdout (guards against extra print()s)
+    for line in reversed(raw.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError:
+                pass
+    return {"passed": 0, "total": len(tests), "failed": []}
+
+
+def _build_failed_cases(runner_failed: list, tests: List[Dict]) -> List[Dict]:
+    """Convert runner failed list to unified schema."""
+    result = []
+    for item in runner_failed:
+        if isinstance(item, (list, tuple)) and len(item) >= 4:
+            idx, inp, exp, act = item[0], item[1], item[2], item[3]
+            err = item[4] if len(item) > 4 else ""
+        elif isinstance(item, dict):
+            idx = item.get("index", 0)
+            inp = tests[idx]["input"] if idx < len(tests) else []
+            exp = tests[idx]["expected"] if idx < len(tests) else None
+            act = item.get("actual")
+            err = item.get("error", "")
+        else:
+            continue
+        result.append({
+            "index": idx,
+            "input": inp,
+            "expected": exp,
+            "actual": act,
+            "error": err,
+        })
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Language-specific runners
+# ---------------------------------------------------------------------------
+
+def _run_python(problem: Dict, user_code: str, tests: List[Dict],
+                tmpdir: str) -> Dict:
+    harness = _build_python_harness(problem, user_code, tests)
+    harness_path = os.path.join(tmpdir, "solution.py")
+    with open(harness_path, "w", encoding="utf-8") as f:
+        f.write(harness)
+
+    result = _run_subprocess([sys.executable, "solution.py"], cwd=tmpdir)
+    if result["timed_out"]:
+        return _error_result("Time Limit", result["stderr"], result["stdout"],
+                             total=len(tests))
+    if result["returncode"] != 0:
+        return _error_result("Runtime Error", result["stderr"], result["stdout"],
+                             total=len(tests))
+
+    parsed = _parse_runner_output(result["stdout"], tests)
+    failed = _build_failed_cases(parsed.get("failed", []), tests)
+    return _ok_result(parsed.get("passed", 0), parsed.get("total", len(tests)),
+                      result["runtime_ms"], failed,
+                      result["stdout"], result["stderr"])
+
+
+def _run_javascript(problem: Dict, user_code: str, tests: List[Dict],
+                    tmpdir: str) -> Dict:
+    harness = _build_js_harness(problem, user_code, tests)
+    harness_path = os.path.join(tmpdir, "solution.js")
+    with open(harness_path, "w", encoding="utf-8") as f:
+        f.write(harness)
+
+    node_cmd = _find_node()
+    result = _run_subprocess([node_cmd, "solution.js"], cwd=tmpdir)
+    if result["timed_out"]:
+        return _error_result("Time Limit", result["stderr"], result["stdout"],
+                             total=len(tests))
+    if result["returncode"] != 0:
+        stderr = result["stderr"]
+        # Node prints syntax errors to stderr with returncode 1
+        if "SyntaxError" in stderr or result["returncode"] == 1:
+            return _error_result("Compile Error", stderr, result["stdout"],
+                                 total=len(tests))
+        return _error_result("Runtime Error", stderr, result["stdout"],
+                             total=len(tests))
+
+    parsed = _parse_runner_output(result["stdout"], tests)
+    failed_raw = parsed.get("failed", [])
+    failed = _build_failed_cases(failed_raw, tests)
+    return _ok_result(parsed.get("passed", 0), parsed.get("total", len(tests)),
+                      result["runtime_ms"], failed,
+                      result["stdout"], result["stderr"])
+
+
+def _find_node() -> str:
+    for candidate in ["node", "/home/runner/work/_temp/ghcca-node/node/bin/node"]:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+        try:
+            subprocess.run([candidate, "--version"], capture_output=True, timeout=3)
+            return candidate
+        except Exception:
+            pass
+    return "node"
+
+
+def _run_java(problem: Dict, user_code: str, tests: List[Dict],
+              tmpdir: str) -> Dict:
+    source = _build_java_files(problem, user_code, tests)
+    src_path = os.path.join(tmpdir, "Main.java")
+    with open(src_path, "w", encoding="utf-8") as f:
+        f.write(source)
+
+    # Compile — use only the stdlib (no org.json) for MVP
+    # We replace the JSONObject approach with a simple printf approach
+    # Rebuild with a simpler harness that doesn't need org.json
+    source = _build_java_simple_harness(problem, user_code, tests)
+    with open(src_path, "w", encoding="utf-8") as f:
+        f.write(source)
+
+    compile_result = _run_subprocess(["javac", "Main.java"], cwd=tmpdir)
+    if compile_result["returncode"] != 0:
+        return _error_result("Compile Error",
+                             compile_result["stderr"], compile_result["stdout"],
+                             total=len(tests))
+
+    run_result = _run_subprocess(["java", "-cp", ".", "Main"], cwd=tmpdir)
+    if run_result["timed_out"]:
+        return _error_result("Time Limit", run_result["stderr"], run_result["stdout"],
+                             total=len(tests))
+    if run_result["returncode"] != 0:
+        return _error_result("Runtime Error", run_result["stderr"], run_result["stdout"],
+                             total=len(tests))
+
+    parsed = _parse_runner_output(run_result["stdout"], tests)
+    failed_count = parsed.get("failed_count", len(tests) - parsed.get("passed", 0))
+    # Build minimal failed_cases list from indices
+    failed = []
+    for idx in parsed.get("failed_indices", []):
+        if idx < len(tests):
+            t = tests[idx]
+            failed.append({
+                "index": idx,
+                "input": t["input"],
+                "expected": t["expected"],
+                "actual": None,
+                "error": "",
+            })
+
+    return _ok_result(parsed.get("passed", 0), parsed.get("total", len(tests)),
+                      run_result["runtime_ms"], failed,
+                      run_result["stdout"], run_result["stderr"])
+
+
+def _build_java_simple_harness(problem: Dict, user_code: str, tests: List[Dict]) -> str:
+    """Build a Java harness using only stdlib (no org.json)."""
+    fn = problem["function_name"]
+    returns = problem.get("returns", "bool")
+    java_ret = _returns_to_java_type(returns)
+    n = len(tests)
+
+    # Build input and expected arrays inline
+    input_lines = []
+    expected_lines = []
+    for t in tests:
+        input_lines.append(_java_literal(t["input"][0]) if t["input"] else '""')
+        expected_lines.append(_java_literal(t["expected"]))
+
+    inputs_str = ",\n            ".join(input_lines)
+    expected_str = ",\n            ".join(expected_lines)
+
+    return f"""
+{user_code}
+
+public class Main {{
+    public static void main(String[] args) {{
+        Solution _sol = new Solution();
+        String[] _inputs = {{
+            {inputs_str}
+        }};
+        boolean[] _expected = {{
+            {expected_str}
+        }};
+
+        int _passed = 0;
+        int _failedCount = 0;
+        StringBuilder _failedIdx = new StringBuilder();
+
+        for (int _i = 0; _i < {n}; _i++) {{
+            boolean _actual;
+            try {{
+                _actual = _sol.{fn}(_inputs[_i]);
+            }} catch (Exception _e) {{
+                _failedCount++;
+                if (_failedIdx.length() > 0) _failedIdx.append(",");
+                _failedIdx.append(_i);
+                continue;
+            }}
+            if (_actual == _expected[_i]) {{
+                _passed++;
+            }} else {{
+                _failedCount++;
+                if (_failedIdx.length() > 0) _failedIdx.append(",");
+                _failedIdx.append(_i);
+            }}
+        }}
+
+        System.out.println(
+            "{{\\\"passed\\\":" + _passed +
+            ",\\\"total\\\":" + {n} +
+            ",\\\"failed_count\\\":" + _failedCount +
+            ",\\\"failed_indices\\\":[" + _failedIdx + "]}}"
+        );
+    }}
+}}
+"""
+
+
+def _run_c(problem: Dict, user_code: str, tests: List[Dict],
+           tmpdir: str) -> Dict:
+    harness = _build_c_harness(problem, user_code, tests)
+    src_path = os.path.join(tmpdir, "solution.c")
+    with open(src_path, "w", encoding="utf-8") as f:
+        f.write(harness)
+
+    compile_result = _run_subprocess(
+        ["gcc", "-O2", "-o", "solution", "solution.c"], cwd=tmpdir)
+    if compile_result["returncode"] != 0:
+        return _error_result("Compile Error",
+                             compile_result["stderr"], compile_result["stdout"],
+                             total=len(tests))
+
+    run_result = _run_subprocess(["./solution"], cwd=tmpdir)
+    if run_result["timed_out"]:
+        return _error_result("Time Limit", run_result["stderr"], run_result["stdout"],
+                             total=len(tests))
+    if run_result["returncode"] != 0:
+        return _error_result("Runtime Error", run_result["stderr"], run_result["stdout"],
+                             total=len(tests))
+
+    parsed = _parse_runner_output(run_result["stdout"], tests)
+    passed = parsed.get("passed", 0)
+    total = parsed.get("total", len(tests))
+    failed_count = parsed.get("failed_count", total - passed)
+    return _ok_result(passed, total, run_result["runtime_ms"], [],
+                      run_result["stdout"], run_result["stderr"])
+
+
+def _run_cpp(problem: Dict, user_code: str, tests: List[Dict],
+             tmpdir: str) -> Dict:
+    harness = _build_cpp_harness(problem, user_code, tests)
+    src_path = os.path.join(tmpdir, "solution.cpp")
+    with open(src_path, "w", encoding="utf-8") as f:
+        f.write(harness)
+
+    compile_result = _run_subprocess(
+        ["g++", "-O2", "-std=c++17", "-o", "solution", "solution.cpp"], cwd=tmpdir)
+    if compile_result["returncode"] != 0:
+        return _error_result("Compile Error",
+                             compile_result["stderr"], compile_result["stdout"],
+                             total=len(tests))
+
+    run_result = _run_subprocess(["./solution"], cwd=tmpdir)
+    if run_result["timed_out"]:
+        return _error_result("Time Limit", run_result["stderr"], run_result["stdout"],
+                             total=len(tests))
+    if run_result["returncode"] != 0:
+        return _error_result("Runtime Error", run_result["stderr"], run_result["stdout"],
+                             total=len(tests))
+
+    parsed = _parse_runner_output(run_result["stdout"], tests)
+    passed = parsed.get("passed", 0)
+    total = parsed.get("total", len(tests))
+    return _ok_result(passed, total, run_result["runtime_ms"], [],
+                      run_result["stdout"], run_result["stderr"])
+
+
+# ---------------------------------------------------------------------------
+# Main public API
+# ---------------------------------------------------------------------------
+
+LANGUAGE_MAP = {
+    "python": _run_python,
+    "javascript": _run_javascript,
+    "js": _run_javascript,
+    "java": _run_java,
+    "c": _run_c,
+    "cpp": _run_cpp,
+    "c++": _run_cpp,
+}
+
+
+def run_challenge(problem_id: str, language: str, user_code: str,
+                  mode: str = "sample") -> Dict:
+    """
+    Run a code challenge submission.
+
+    Args:
+        problem_id: Problem identifier (e.g. "valid_parentheses")
+        language:   One of python, javascript, java, c, cpp/c++
+        user_code:  The candidate's function-only code
+        mode:       "sample" (sample tests only) or "all" (all tests)
+
+    Returns:
+        Unified result dict with keys: ok, verdict, passed, total,
+        runtime_ms, failed_cases, stdout, stderr
+    """
+    try:
+        problem = load_problem(problem_id)
+    except FileNotFoundError as exc:
+        return _error_result("Runtime Error", str(exc))
+
+    lang_key = language.lower().strip()
+    runner_fn = LANGUAGE_MAP.get(lang_key)
+    if runner_fn is None:
+        return _error_result("Runtime Error",
+                             f"Unsupported language: {language}")
+
+    tests_data = problem.get("tests", {})
+    if mode == "all":
+        tests = tests_data.get("sample", []) + tests_data.get("hidden", [])
+    else:
+        tests = tests_data.get("sample", [])
+
+    if not tests:
+        return _error_result("Runtime Error", "No test cases available.")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        try:
+            return runner_fn(problem, user_code, tests, tmpdir)
+        except Exception as exc:  # pragma: no cover
+            return _error_result("Runtime Error", str(exc), total=len(tests))

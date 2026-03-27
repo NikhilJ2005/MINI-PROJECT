@@ -1252,6 +1252,71 @@ async def submit_code_challenge(request: Request, body: CodeSubmitRequest):
 
 
 # ---------------------------------------------------------------------------
+#  ENDPOINTS: Function-only Code Challenge Runner (LeetCode-style)
+# ---------------------------------------------------------------------------
+from modules.challenge_runner import (
+    list_problems as _cr_list_problems,
+    problem_detail as _cr_problem_detail,
+    run_challenge as _cr_run_challenge,
+)
+
+
+@app.get("/challenge/problems")
+async def challenge_list_problems():
+    """Return list of available problems (id, title, difficulty)."""
+    try:
+        return _cr_list_problems()
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+@app.get("/challenge/problem/{problem_id}")
+async def challenge_get_problem(problem_id: str):
+    """Return problem detail (without hidden tests)."""
+    try:
+        return _cr_problem_detail(problem_id)
+    except FileNotFoundError:
+        raise HTTPException(404, f"Problem '{problem_id}' not found.")
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+class ChallengeSubmitRequest(BaseModel):
+    problem_id: str = Field(max_length=100)
+    language: str = Field(max_length=20)
+    code: str = Field(max_length=100_000)
+    mode: str = Field(default="sample", max_length=10)
+
+
+@app.post("/challenge/submit")
+@limiter.limit("10/minute")
+async def challenge_submit(request: Request, body: ChallengeSubmitRequest):
+    """
+    Run a function-only code submission against test cases.
+
+    mode='sample' runs only the sample tests (safe to expose result).
+    mode='all'    runs all tests including hidden ones.
+    """
+    if body.mode not in ("sample", "all"):
+        raise HTTPException(400, "mode must be 'sample' or 'all'.")
+    if not body.code.strip():
+        raise HTTPException(400, "code cannot be empty.")
+
+    result = _cr_run_challenge(
+        problem_id=body.problem_id,
+        language=body.language,
+        user_code=body.code,
+        mode=body.mode,
+    )
+    logger.info(
+        f"[ChallengeSubmit] problem={body.problem_id} lang={body.language} "
+        f"mode={body.mode} verdict={result['verdict']} "
+        f"passed={result['passed']}/{result['total']}"
+    )
+    return result
+
+
+# ---------------------------------------------------------------------------
 #  ENDPOINT: Analyze Code Files (Recruiter batch code quality)
 # ---------------------------------------------------------------------------
 @app.post("/analyze-code-files")
