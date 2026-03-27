@@ -54,9 +54,12 @@ function CodeChallenge({ targetRole, candidateId, analysisId }) {
   // Load problem list on mount
   useEffect(() => {
     fetch(`${API_BASE_URL}/challenge/problems`)
-      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then((data) => setProblems(data))
-      .catch(() => {});
+      .catch((err) => {
+        setError("Could not load problem list. Please try again later.");
+        console.error("Failed to fetch challenge problems:", err);
+      });
   }, []);
 
   // Load selected problem
