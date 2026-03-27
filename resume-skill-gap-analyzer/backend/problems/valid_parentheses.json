@@ -1,0 +1,54 @@
+{
+  "id": "valid_parentheses",
+  "title": "Valid Parentheses",
+  "difficulty": "easy",
+  "prompt": "Given a string s containing just the characters '(', ')', '{', '}', '[' and ']', determine if the input string is valid.\n\nAn input string is valid if:\n1. Open brackets must be closed by the same type of brackets.\n2. Open brackets must be closed in the correct order.\n3. Every close bracket has a corresponding open bracket of the same type.",
+  "constraints": [
+    "1 <= s.length <= 10^4",
+    "s consists of parentheses only '()[]{}'."
+  ],
+  "function_name": "isValid",
+  "params": [
+    { "name": "s", "type": "string" }
+  ],
+  "returns": "bool",
+  "examples": [
+    {
+      "input": "\"()\"",
+      "output": "true",
+      "explanation": "The brackets are matched and closed in the correct order."
+    },
+    {
+      "input": "\"()[]{}\"",
+      "output": "true",
+      "explanation": "All brackets are matched."
+    },
+    {
+      "input": "\"(]\"",
+      "output": "false",
+      "explanation": "Mismatched brackets."
+    }
+  ],
+  "starter_templates": {
+    "python": "def isValid(s: str) -> bool:\n    # Write your solution here\n    pass\n",
+    "javascript": "/**\n * @param {string} s\n * @return {boolean}\n */\nfunction isValid(s) {\n    // Write your solution here\n};\n",
+    "java": "class Solution {\n    public boolean isValid(String s) {\n        // Write your solution here\n        return false;\n    }\n}\n",
+    "c": "// Return 1 for true, 0 for false\nint isValid(const char* s) {\n    // Write your solution here\n    return 0;\n}\n",
+    "cpp": "#include <string>\nusing namespace std;\n\nbool isValid(string s) {\n    // Write your solution here\n    return false;\n}\n"
+  },
+  "tests": {
+    "sample": [
+      { "input": ["()"],     "expected": true  },
+      { "input": ["()[]{}"], "expected": true  },
+      { "input": ["(]"],     "expected": false }
+    ],
+    "hidden": [
+      { "input": [""],       "expected": true  },
+      { "input": ["{[]}"],   "expected": true  },
+      { "input": ["([)]"],   "expected": false },
+      { "input": ["{"],      "expected": false },
+      { "input": ["]]"],     "expected": false },
+      { "input": ["(){}[]"], "expected": true  }
+    ]
+  }
+}
