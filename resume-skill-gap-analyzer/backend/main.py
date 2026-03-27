@@ -1267,7 +1267,8 @@ async def challenge_list_problems():
     try:
         return _cr_list_problems()
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        logger.exception("challenge_list_problems failed: %s", exc)
+        raise HTTPException(500, "Failed to load problem list.")
 
 
 @app.get("/challenge/problem/{problem_id}")
@@ -1278,7 +1279,8 @@ async def challenge_get_problem(problem_id: str):
     except FileNotFoundError:
         raise HTTPException(404, f"Problem '{problem_id}' not found.")
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        logger.exception("challenge_get_problem failed for '%s': %s", problem_id, exc)
+        raise HTTPException(500, "Failed to load problem detail.")
 
 
 class ChallengeSubmitRequest(BaseModel):

@@ -7,7 +7,9 @@ returns a unified result schema.
 """
 
 import json
+import logging
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -17,6 +19,9 @@ from typing import Any, Dict, List, Optional
 
 PROBLEMS_DIR = Path(__file__).resolve().parent.parent / "problems"
 TIMEOUT_SECONDS = 10  # per-run wall-clock limit
+MAX_OUTPUT_BYTES = 1 * 1024 * 1024  # 1 MiB per stream
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -79,9 +84,27 @@ def list_problems() -> List[Dict]:
     return problems
 
 
+_TEMPLATE_ALIASES: Dict[str, str] = {
+    "js": "javascript",
+    "c++": "cpp",
+    "py": "python",
+}
+
+# Frontend language values that must always be present.
+_FRONTEND_LANGUAGES = ("python", "javascript", "java", "c", "cpp")
+
+
 def problem_detail(problem_id: str) -> Dict:
     """Return problem detail without exposing hidden tests."""
     data = load_problem(problem_id)
+
+    # Normalize starter_template keys so frontend language values always resolve.
+    raw_templates: Dict[str, str] = data.get("starter_templates", {})
+    templates: Dict[str, str] = {}
+    for key, val in raw_templates.items():
+        canonical = _TEMPLATE_ALIASES.get(key.lower(), key.lower())
+        templates[canonical] = val
+
     return {
         "id": data["id"],
         "title": data["title"],
@@ -92,7 +115,7 @@ def problem_detail(problem_id: str) -> Dict:
         "params": data["params"],
         "returns": data["returns"],
         "examples": data.get("examples", []),
-        "starter_templates": data.get("starter_templates", {}),
+        "starter_templates": templates,
         # Only expose sample tests (not hidden)
         "sample_tests": data.get("tests", {}).get("sample", []),
     }
@@ -205,6 +228,7 @@ def _build_js_harness(problem: Dict, user_code: str, tests: List[Dict]) -> str:
     test_json = json.dumps(tests)
     harness = f"""{user_code}
 
+const _util = require('util');
 const _tests = {test_json};
 let _passed = 0;
 const _failed = [];
@@ -218,7 +242,7 @@ for (let _i = 0; _i < _tests.length; _i++) {{
     _failed.push([_i, _t.input, _t.expected, null, e.message]);
     continue;
   }}
-  if (_actual === _t.expected) {{
+  if (_util.isDeepStrictEqual(_actual, _t.expected)) {{
     _passed++;
   }} else {{
     _failed.push([_i, _t.input, _t.expected, _actual, '']);
@@ -279,8 +303,13 @@ int main(void) {{
         }}
     }}
 
-    printf("{{\\\"passed\\\":%d,\\\"total\\\":%d,\\\"failed_count\\\":%d}}\\n",
+    printf("{{\\\"passed\\\":%d,\\\"total\\\":%d,\\\"failed_count\\\":%d,\\\"failed_indices\\\":[",
            passed, total, failed_count);
+    for (int i = 0; i < failed_count; i++) {{
+        if (i > 0) printf(",");
+        printf("%d", failed_indices[i]);
+    }}
+    printf("]}}\\n");
     return 0;
 }}
 """
@@ -314,25 +343,31 @@ int main() {{
     vector<bool> expected = {{ {expected_str} }};
     int total = {n};
     int passed = 0;
-    int failed_count = 0;
+    vector<int> failed_idx;
 
     for (int i = 0; i < total; i++) {{
         bool actual;
         try {{
             actual = {fn}(inputs[i]);
         }} catch (...) {{
-            failed_count++;
+            failed_idx.push_back(i);
             continue;
         }}
         if (actual == expected[i]) {{
             passed++;
         }} else {{
-            failed_count++;
+            failed_idx.push_back(i);
         }}
     }}
 
     cout << "{{\\\"passed\\\":" << passed << ",\\\"total\\\":" << total
-         << ",\\\"failed_count\\\":" << failed_count << "}}" << endl;
+         << ",\\\"failed_count\\\":" << (int)failed_idx.size()
+         << ",\\\"failed_indices\\\":[";
+    for (int i = 0; i < (int)failed_idx.size(); i++) {{
+        if (i > 0) cout << ",";
+        cout << failed_idx[i];
+    }}
+    cout << "]}}" << endl;
     return 0;
 }}
 """
@@ -344,34 +379,63 @@ int main() {{
 # ---------------------------------------------------------------------------
 
 def _run_subprocess(cmd: List[str], cwd: str, stdin: Optional[str] = None) -> Dict:
-    """Run a subprocess with timeout, return stdout/stderr/returncode/runtime_ms."""
+    """Run a subprocess with timeout, output-size limit, and process-tree kill."""
     start = time.monotonic()
+    kwargs: Dict[str, Any] = {
+        "stdin": subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "cwd": cwd,
+    }
+    # Create a new process group so we can kill the whole tree on timeout.
+    if os.name != "nt":
+        kwargs["start_new_session"] = True
+
+    proc = subprocess.Popen(cmd, **kwargs)
+    stdin_bytes = stdin.encode() if stdin is not None else None
+
     try:
-        proc = subprocess.run(
-            cmd,
-            cwd=cwd,
-            input=stdin,
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SECONDS,
-        )
-        elapsed = (time.monotonic() - start) * 1000
-        return {
-            "returncode": proc.returncode,
-            "stdout": proc.stdout,
-            "stderr": proc.stderr,
-            "runtime_ms": elapsed,
-            "timed_out": False,
-        }
+        raw_out, raw_err = proc.communicate(input=stdin_bytes, timeout=TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
-        elapsed = TIMEOUT_SECONDS * 1000
+        # Kill the entire process group on POSIX; fall back to simple kill on Windows.
+        if os.name != "nt":
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+        else:
+            proc.kill()
+        proc.communicate()  # drain to avoid zombie
         return {
             "returncode": -1,
             "stdout": "",
             "stderr": "Time limit exceeded.",
-            "runtime_ms": elapsed,
+            "runtime_ms": TIMEOUT_SECONDS * 1000,
             "timed_out": True,
         }
+
+    elapsed = (time.monotonic() - start) * 1000
+
+    # Enforce output size limit to prevent memory exhaustion (byte-accurate check).
+    if len(raw_out) > MAX_OUTPUT_BYTES:
+        raw_out = raw_out[:MAX_OUTPUT_BYTES]
+        stdout_str = raw_out.decode(errors="replace") + "\n[output truncated]"
+    else:
+        stdout_str = raw_out.decode(errors="replace")
+
+    if len(raw_err) > MAX_OUTPUT_BYTES:
+        raw_err = raw_err[:MAX_OUTPUT_BYTES]
+        stderr_str = raw_err.decode(errors="replace") + "\n[output truncated]"
+    else:
+        stderr_str = raw_err.decode(errors="replace")
+
+    return {
+        "returncode": proc.returncode,
+        "stdout": stdout_str,
+        "stderr": stderr_str,
+        "runtime_ms": elapsed,
+        "timed_out": False,
+    }
 
 
 def _parse_runner_output(raw: str, tests: List[Dict]) -> Dict[str, Any]:
@@ -453,8 +517,19 @@ def _run_javascript(problem: Dict, user_code: str, tests: List[Dict],
                              total=len(tests))
     if result["returncode"] != 0:
         stderr = result["stderr"]
-        # Node prints syntax errors to stderr with returncode 1
-        if "SyntaxError" in stderr or result["returncode"] == 1:
+        # Classify as Compile Error only for actual syntax/parse failures.
+        # Node.js uses exit code 1 for both syntax errors and runtime errors,
+        # so inspect stderr rather than relying on the exit code alone.
+        _COMPILE_ERROR_MARKERS = (
+            "SyntaxError",
+            "Unexpected token",
+            "Unexpected end of input",
+            "Invalid or unexpected token",
+            "Cannot use import statement",
+            "Cannot find module",
+        )
+        is_compile_error = any(marker in stderr for marker in _COMPILE_ERROR_MARKERS)
+        if is_compile_error:
             return _error_result("Compile Error", stderr, result["stdout"],
                                  total=len(tests))
         return _error_result("Runtime Error", stderr, result["stdout"],
@@ -610,8 +685,18 @@ def _run_c(problem: Dict, user_code: str, tests: List[Dict],
     parsed = _parse_runner_output(run_result["stdout"], tests)
     passed = parsed.get("passed", 0)
     total = parsed.get("total", len(tests))
-    failed_count = parsed.get("failed_count", total - passed)
-    return _ok_result(passed, total, run_result["runtime_ms"], [],
+    failed = []
+    for idx in parsed.get("failed_indices", []):
+        if isinstance(idx, int) and idx < len(tests):
+            t = tests[idx]
+            failed.append({
+                "index": idx,
+                "input": t["input"],
+                "expected": t["expected"],
+                "actual": None,
+                "error": "",
+            })
+    return _ok_result(passed, total, run_result["runtime_ms"], failed,
                       run_result["stdout"], run_result["stderr"])
 
 
@@ -640,7 +725,18 @@ def _run_cpp(problem: Dict, user_code: str, tests: List[Dict],
     parsed = _parse_runner_output(run_result["stdout"], tests)
     passed = parsed.get("passed", 0)
     total = parsed.get("total", len(tests))
-    return _ok_result(passed, total, run_result["runtime_ms"], [],
+    failed = []
+    for idx in parsed.get("failed_indices", []):
+        if isinstance(idx, int) and idx < len(tests):
+            t = tests[idx]
+            failed.append({
+                "index": idx,
+                "input": t["input"],
+                "expected": t["expected"],
+                "actual": None,
+                "error": "",
+            })
+    return _ok_result(passed, total, run_result["runtime_ms"], failed,
                       run_result["stdout"], run_result["stderr"])
 
 

@@ -5,11 +5,17 @@ Covers:
   - Python accepted / wrong answer for Valid Parentheses
   - Java compile error case
   - Response schema keys always present
-  - C/C++ accepted case
+  - C/C++ accepted case + failed_cases details
+  - JS deep equality for arrays/objects
+  - JS error classification (Compile Error vs Runtime Error)
+  - Template key normalization in problem_detail
 """
 
 import importlib.util
+import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -30,6 +36,9 @@ run_challenge = _mod.run_challenge
 load_problem = _mod.load_problem
 list_problems = _mod.list_problems
 problem_detail = _mod.problem_detail
+_build_js_harness = _mod._build_js_harness
+_find_node = _mod._find_node
+_run_subprocess = _mod._run_subprocess
 
 PROBLEM_ID = "valid_parentheses"
 
@@ -85,6 +94,16 @@ class TestProblemMetadata:
         assert "sample_tests" in detail
         # starter templates should be present
         assert "starter_templates" in detail
+
+    def test_problem_detail_normalizes_template_keys(self):
+        detail = problem_detail(PROBLEM_ID)
+        templates = detail["starter_templates"]
+        # Frontend uses these exact keys; none of the alias forms should appear.
+        for alias in ("js", "c++", "py"):
+            assert alias not in templates, f"Alias key '{alias}' should be normalized"
+        # Canonical keys should be present (problem has them already, normalization kept them)
+        assert "python" in templates
+        assert "javascript" in templates
 
     def test_load_nonexistent_problem(self):
         with pytest.raises(FileNotFoundError):
@@ -184,6 +203,19 @@ function isValid(s) { return true; }
 """
 
 
+JS_SYNTAX_ERROR = """\
+function isValid(s {
+    return true;
+}
+"""
+
+JS_RUNTIME_ERROR = """\
+function isValid(s) {
+    throw new Error("intentional runtime error");
+}
+"""
+
+
 class TestJavaScriptRunner:
     def test_accepted(self):
         result = run_challenge(PROBLEM_ID, "javascript", JS_ACCEPTED, mode="sample")
@@ -195,6 +227,19 @@ class TestJavaScriptRunner:
         result = run_challenge(PROBLEM_ID, "javascript", JS_WRONG, mode="sample")
         assert_schema(result)
         assert result["verdict"] == "Wrong Answer"
+        assert result["ok"] is False
+
+    def test_syntax_error_is_compile_error(self):
+        result = run_challenge(PROBLEM_ID, "javascript", JS_SYNTAX_ERROR, mode="sample")
+        assert_schema(result)
+        assert result["verdict"] == "Compile Error"
+        assert result["ok"] is False
+
+    def test_runtime_error_is_not_compile_error(self):
+        result = run_challenge(PROBLEM_ID, "javascript", JS_RUNTIME_ERROR, mode="sample")
+        assert_schema(result)
+        # A thrown runtime error must NOT be classified as Compile Error
+        assert result["verdict"] != "Compile Error"
         assert result["ok"] is False
 
 
@@ -283,6 +328,13 @@ int isValid(const char* s) {
 """
 
 
+C_WRONG = """\
+int isValid(const char* s) {
+    return 0;  /* always false */
+}
+"""
+
+
 class TestCRunner:
     def test_accepted(self):
         result = run_challenge(PROBLEM_ID, "c", C_ACCEPTED, mode="sample")
@@ -295,6 +347,18 @@ class TestCRunner:
         assert_schema(result)
         assert result["verdict"] == "Compile Error"
         assert result["ok"] is False
+
+    def test_wrong_answer_returns_failed_cases(self):
+        result = run_challenge(PROBLEM_ID, "c", C_WRONG, mode="sample")
+        assert_schema(result)
+        assert result["verdict"] == "Wrong Answer"
+        assert result["ok"] is False
+        # At least one failed case must be reported with details
+        assert len(result["failed_cases"]) > 0
+        fc = result["failed_cases"][0]
+        assert "index" in fc
+        assert "input" in fc
+        assert "expected" in fc
 
 
 # -----------------------------------------------------------------------
@@ -324,12 +388,33 @@ bool isValid(string s) {
 """
 
 
+CPP_WRONG = """\
+#include <string>
+using namespace std;
+
+bool isValid(string s) {
+    return false;  // always false
+}
+"""
+
+
 class TestCppRunner:
     def test_accepted(self):
         result = run_challenge(PROBLEM_ID, "cpp", CPP_ACCEPTED, mode="sample")
         assert_schema(result)
         assert result["verdict"] == "Accepted"
         assert result["ok"] is True
+
+    def test_wrong_answer_returns_failed_cases(self):
+        result = run_challenge(PROBLEM_ID, "cpp", CPP_WRONG, mode="sample")
+        assert_schema(result)
+        assert result["verdict"] == "Wrong Answer"
+        assert result["ok"] is False
+        assert len(result["failed_cases"]) > 0
+        fc = result["failed_cases"][0]
+        assert "index" in fc
+        assert "input" in fc
+        assert "expected" in fc
 
 
 # -----------------------------------------------------------------------
@@ -359,3 +444,43 @@ class TestSchemaCompleteness:
         result = run_challenge("no_such_problem", "python", "def f(): pass", mode="sample")
         assert_schema(result)
         assert result["ok"] is False
+
+# -----------------------------------------------------------------------
+# JS deep equality — arrays and objects must compare by value, not ref
+# -----------------------------------------------------------------------
+
+class TestJSDeepEquality:
+    """Verify that JS harness uses deep equality so array/object returns work."""
+
+    def test_array_return_accepted(self):
+        """A function returning an array must be accepted when values match."""
+        # Synthetic problem with array return
+        mock_problem = {
+            "function_name": "twoSum",
+            "returns": "array",
+        }
+        tests = [
+            {"input": [[2, 7, 11, 15], 9], "expected": [0, 1]},
+            {"input": [[3, 2, 4], 6],      "expected": [1, 2]},
+        ]
+        user_code = """\
+function twoSum(nums, target) {
+    const map = {};
+    for (let i = 0; i < nums.length; i++) {
+        const comp = target - nums[i];
+        if (comp in map) return [map[comp], i];
+        map[nums[i]] = i;
+    }
+}
+"""
+        harness = _build_js_harness(mock_problem, user_code, tests)
+        node_cmd = _find_node()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            harness_path = os.path.join(tmpdir, "solution.js")
+            with open(harness_path, "w") as f:
+                f.write(harness)
+            res = _run_subprocess([node_cmd, "solution.js"], cwd=tmpdir)
+        assert res["returncode"] == 0, f"Node error: {res['stderr']}"
+        out = json.loads(res["stdout"].strip())
+        assert out["passed"] == 2, f"Expected 2 passed, got: {out}"
+        assert out["failed"] == [], f"Expected no failures, got: {out['failed']}"
