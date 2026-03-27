@@ -6,6 +6,8 @@ __pycache__/
 .env
 node_modules/
 package-lock.json
+# Build output
+dist/
 # Database
 *.db
 # IDE

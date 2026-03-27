@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import { useUserRole } from "./UserRoleContext";
+import NotAuthorized from "./NotAuthorized";
 import Papa from "papaparse";
 import { showToast } from "./Toast";
 import "./cssFile/CandidatesList.css";
@@ -6,6 +8,7 @@ import "./cssFile/CandidatesList.css";
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 function CandidatesList() {
+  const { userRole } = useUserRole();
   const [candidates, setCandidates] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -105,6 +108,10 @@ function CandidatesList() {
 
   const sortIcon = (key) => (sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : "");
 
+  if (userRole !== "recruiter") {
+    return <NotAuthorized message="Recruiter access required" />;
+  }
+
   if (loading) {
     return (
       <div className="candidates-page">
@@ -167,7 +174,7 @@ function CandidatesList() {
           </div>
           {detail.analyses && detail.analyses.length > 0 && (
             <div className="analyses-section">
-              <h4>Analysis History</h4>
+              <h4>Previous Analyses</h4>
               {detail.analyses.map((a, i) => (
                 <div className="analysis-card" key={i}>
                   <div className="analysis-header">

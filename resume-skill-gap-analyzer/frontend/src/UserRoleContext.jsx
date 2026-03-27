@@ -12,13 +12,16 @@ export function UserRoleProvider({ children }) {
     localStorage.setItem("userRole", role);
   }, []);
 
-  const logout = useCallback(() => {
+  const switchRole = useCallback(() => {
     setUserRoleState(null);
     localStorage.removeItem("userRole");
   }, []);
 
+  // Keep logout as an alias for backward compatibility
+  const logout = switchRole;
+
   return (
-    <UserRoleContext.Provider value={{ userRole, setUserRole, logout }}>
+    <UserRoleContext.Provider value={{ userRole, setUserRole, logout, switchRole }}>
       {children}
     </UserRoleContext.Provider>
   );
