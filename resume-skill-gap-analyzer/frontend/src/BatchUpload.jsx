@@ -132,6 +132,13 @@ function BatchUpload() {
     setError("");
   };
 
+  const clearResults = () => {
+    setResult(null);
+    setError("");
+    setFiles([]);
+    setCodeFiles([]);
+  };
+
   // Drag & drop handlers
   const handleDrop = (e) => {
     e.preventDefault();
@@ -330,6 +337,12 @@ function BatchUpload() {
 
       {result && (
         <div className="batch-results">
+          <div className="batch-results-header">
+            <h3 className="batch-results-title">Batch Results</h3>
+            <button type="button" className="clear-results-btn" onClick={clearResults}>
+              Clear Results
+            </button>
+          </div>
           <div className="batch-summary">
             <span className="batch-stat">Analyzed: <strong>{result.total_analyzed}</strong></span>
             <span className="batch-stat">Errors: <strong>{result.total_errors}</strong></span>

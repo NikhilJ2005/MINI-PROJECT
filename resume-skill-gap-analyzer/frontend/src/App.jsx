@@ -1,5 +1,5 @@
 import "./cssFile/App.css";
-import { useState, useCallback, useEffect, lazy, Suspense } from "react";
+import { useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { useUserRole } from "./UserRoleContext";
 import { getVisibleTabs } from "./TabNav";
 import TabNav from "./TabNav";
@@ -35,6 +35,9 @@ function App() {
   const [currentAnalysisId, setCurrentAnalysisId] = useState(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
+  // Track the last non-null role to detect actual role switches
+  const lastRoleRef = useRef(null);
+
   // Dark mode state
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem("theme") === "dark"
@@ -54,6 +57,20 @@ function App() {
   useEffect(() => {
     localStorage.setItem("activeTab", activeTab);
   }, [activeTab]);
+
+  // Reset view state when role actually switches (candidate ↔ recruiter)
+  useEffect(() => {
+    if (userRole) {
+      if (lastRoleRef.current !== null && lastRoleRef.current !== userRole) {
+        setActiveTab("analyze");
+        setReport(null);
+        setCurrentAnalysisId(null);
+        setError("");
+        setLoading(false);
+      }
+      lastRoleRef.current = userRole;
+    }
+  }, [userRole]);
 
   // Guard: if current activeTab isn't visible for this role, reset to "analyze"
   useEffect(() => {
