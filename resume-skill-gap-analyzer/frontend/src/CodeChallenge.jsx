@@ -79,13 +79,15 @@ function CodeChallenge({ targetRole, candidateId, analysisId }) {
     }
   }, [language]);
 
-  // Reload starter template when language changes
+  // Reload starter template when language changes.
+  // `problem` is intentionally omitted: we only want this to fire on language
+  // change, not every time problem is re-fetched (fetchProblem already sets code).
   useEffect(() => {
     if (problem) {
       setCode(problem.starter_templates?.[language] || "");
       setResult(null);
     }
-  }, [language]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleProblemChange = (id) => {
     setSelectedProblemId(id);

@@ -167,11 +167,6 @@ def _returns_to_java_type(returns: str) -> str:
     return mapping.get(returns, "boolean")
 
 
-def _c_format_spec(returns: str) -> str:
-    mapping = {"bool": "%d", "int": "%d", "float": "%f",
-               "double": "%lf", "string": "%s", "str": "%s"}
-    return mapping.get(returns, "%d")
-
 
 # ---------------------------------------------------------------------------
 # Harness builders — one per language
@@ -235,94 +230,11 @@ console.log(JSON.stringify({{passed: _passed, total: _tests.length, failed: _fai
     return harness
 
 
-def _build_java_files(problem: Dict, user_code: str, tests: List[Dict]) -> str:
-    """Return Java source that embeds tests and calls the user's class method."""
-    fn = problem["function_name"]
-    returns = problem.get("returns", "bool")
-    java_ret = _returns_to_java_type(returns)
-
-    # Build test arrays
-    param_types = [p["type"] for p in problem["params"]]
-
-    # For MVP (single string param, bool return — Valid Parentheses)
-    # We build the harness generically for bool returns with String params
-    param_java_type = "String"  # MVP: string only
-    if param_types and param_types[0] in ("int", "integer"):
-        param_java_type = "int"
-
-    # Build input/expected arrays
-    input_literals = []
-    expected_literals = []
-    for t in tests:
-        inp_parts = ", ".join(_java_literal(v) for v in t["input"])
-        input_literals.append(f"        new {param_java_type}[]{{{inp_parts}}}" if len(t["input"]) > 1
-                              else _java_literal(t["input"][0]))
-        expected_literals.append(_java_literal(t["expected"]))
-
-    inputs_arr = ",\n            ".join(input_literals)
-    expected_arr = ",\n            ".join(expected_literals)
-    n = len(tests)
-
-    # Extract just the method from user code if it contains a class wrapper
-    # We embed the user's Solution class and call it
-    source = f"""import org.json.JSONArray;
-import org.json.JSONObject;
-
-{user_code}
-
-public class Main {{
-    public static void main(String[] args) throws Exception {{
-        Solution _sol = new Solution();
-
-        {param_java_type}[] _inputs = {{
-            {inputs_arr}
-        }};
-        {java_ret}[] _expected = {{
-            {expected_arr}
-        }};
-
-        int _passed = 0;
-        JSONArray _failed = new JSONArray();
-
-        for (int _i = 0; _i < {n}; _i++) {{
-            {java_ret} _actual;
-            try {{
-                _actual = _sol.{fn}(_inputs[_i]);
-            }} catch (Exception _e) {{
-                JSONObject _fc = new JSONObject();
-                _fc.put("index", _i);
-                _fc.put("error", _e.getMessage());
-                _failed.put(_fc);
-                continue;
-            }}
-            if (_actual == _expected[_i]) {{
-                _passed++;
-            }} else {{
-                JSONObject _fc = new JSONObject();
-                _fc.put("index", _i);
-                _fc.put("expected", _expected[_i]);
-                _fc.put("actual", _actual);
-                _failed.put(_fc);
-            }}
-        }}
-
-        JSONObject _result = new JSONObject();
-        _result.put("passed", _passed);
-        _result.put("total", {n});
-        _result.put("failed", _failed);
-        System.out.println(_result.toString());
-    }}
-}}
-"""
-    return source
-
-
 def _build_c_harness(problem: Dict, user_code: str, tests: List[Dict]) -> str:
     """Generate a self-contained C program with test cases embedded as literals."""
     fn = problem["function_name"]
     returns = problem.get("returns", "bool")
     c_type = _returns_to_c_type(returns)
-    fmt = _c_format_spec(returns)
 
     # Build case arrays
     case_lines = []
@@ -570,15 +482,8 @@ def _find_node() -> str:
 
 def _run_java(problem: Dict, user_code: str, tests: List[Dict],
               tmpdir: str) -> Dict:
-    source = _build_java_files(problem, user_code, tests)
-    src_path = os.path.join(tmpdir, "Main.java")
-    with open(src_path, "w", encoding="utf-8") as f:
-        f.write(source)
-
-    # Compile — use only the stdlib (no org.json) for MVP
-    # We replace the JSONObject approach with a simple printf approach
-    # Rebuild with a simpler harness that doesn't need org.json
     source = _build_java_simple_harness(problem, user_code, tests)
+    src_path = os.path.join(tmpdir, "Main.java")
     with open(src_path, "w", encoding="utf-8") as f:
         f.write(source)
 
