@@ -151,7 +151,7 @@ At minimum you can run the app without API keys, but these enable useful integra
 
 ## Notable API endpoints (backend)
 
-- GET /               ��� health check
+- GET /               - health check
 - POST /analyze       — analyze uploaded resume file
 - POST /analyze-text  — analyze raw resume text
 - POST /analyze-batch — analyze multiple resumes
@@ -160,7 +160,6 @@ At minimum you can run the app without API keys, but these enable useful integra
 - GET /candidates     — list candidates
 - GET /dashboard      — analytics dashboard
 
-(See resume-skill-gap-analyzer/backend/main.py for full endpoint list and rate limits.)
 
 ---
 
@@ -202,7 +201,7 @@ Please add or update skill aliases and job role JSONs carefully — they directl
 
 ## License & contact
 
-- License: (If you have one, add it here — e.g., MIT). If you want, I can add an MIT license file.
+
 - Author / Contact: NikhilJ2005 (GitHub) — open issues or PRs for questions.
 
 ---
